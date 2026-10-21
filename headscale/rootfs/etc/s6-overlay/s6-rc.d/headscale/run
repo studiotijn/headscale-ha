@@ -1,0 +1,8 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Headscale control server
+# ==============================================================================
+bashio::log.info "Starting Headscale $(headscale version 2>/dev/null | head -n1 | awk '{print $3}')"
+date +%s > /run/hsha/headscale-started
+exec headscale -c /data/headscale/config.yaml serve

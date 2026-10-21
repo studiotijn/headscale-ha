@@ -1,0 +1,112 @@
+"""App options (/data/options.json) with defaults and validation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from urllib.parse import urlsplit
+
+from . import paths
+from .store import read_json
+
+DEFAULTS = {
+    "server_url": "https://hs.example.duckdns.org",
+    "tls_mode": "letsencrypt",
+    "acme_email": "",
+    "certfile": "fullchain.pem",
+    "keyfile": "privkey.pem",
+    "listen_port": 443,
+    "derp_enabled": True,
+    "stun_port": 3478,
+    "tailscale_derp_fallback": True,
+    "base_domain": "tailnet.home",
+    "nameservers": ["1.1.1.1", "9.9.9.9"],
+    "admin_user": "admin",
+    "node_expiry_days": 180,
+    "subnet_router": True,
+    "advertise_routes": [],
+    "exit_node": False,
+    "userspace_networking": True,
+    "headplane": True,
+    "headplane_port": 3000,
+    "log_level": "info",
+}
+
+
+class OptionsError(ValueError):
+    """Raised for option combinations that cannot work."""
+
+
+@dataclass
+class Options:
+    raw: dict = field(default_factory=dict)
+
+    def __getattr__(self, name: str):
+        try:
+            return self.raw[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    @property
+    def server_host(self) -> str:
+        return (urlsplit(self.server_url).hostname or "").lower()
+
+    @property
+    def server_url_clean(self) -> str:
+        return self.server_url.rstrip("/")
+
+    @property
+    def tls(self) -> bool:
+        return self.tls_mode in ("letsencrypt", "ha_certificate")
+
+    @property
+    def internal_url(self) -> str:
+        """URL local processes use to reach Headscale (via loopback)."""
+        if self.tls:
+            port = "" if self.listen_port == 443 else f":{self.listen_port}"
+            return f"https://{self.server_host}{port}"
+        return f"http://127.0.0.1:{self.listen_port}"
+
+    def warnings(self) -> list[str]:
+        out = []
+        if self.tls_mode == "letsencrypt" and self.listen_port != 443:
+            out.append(
+                "tls_mode letsencrypt uses the TLS-ALPN-01 challenge, which Let's Encrypt "
+                "always performs on port 443. Forward external port 443 to "
+                f"listen_port {self.listen_port} or certificates cannot be issued."
+            )
+        if not self.derp_enabled and self.tailscale_derp_fallback:
+            out.append("Embedded DERP disabled: relayed traffic goes through Tailscale's public DERP servers.")
+        return out
+
+    def validate(self) -> None:
+        url = urlsplit(self.server_url)
+        host = self.server_host
+        if url.scheme not in ("http", "https") or not host:
+            raise OptionsError(f"server_url '{self.server_url}' must be http(s)://hostname[:port]")
+        if self.tls and url.scheme != "https":
+            raise OptionsError(f"tls_mode '{self.tls_mode}' requires an https:// server_url")
+        base = self.base_domain.lower().strip(".")
+        if host == base or host.endswith("." + base) or base.endswith("." + host):
+            raise OptionsError(
+                f"base_domain '{base}' must not overlap with the server_url host '{host}'. "
+                "Use something like 'tailnet.home'."
+            )
+        if not self.derp_enabled and not self.tailscale_derp_fallback:
+            raise OptionsError(
+                "Both the embedded DERP server and the Tailscale DERP fallback are disabled; "
+                "clients behind NAT would not be able to connect. Enable at least one."
+            )
+        if self.tls_mode == "ha_certificate":
+            for name in (self.certfile, self.keyfile):
+                if not (paths.SSL / name).is_file():
+                    raise OptionsError(f"tls_mode ha_certificate: /ssl/{name} not found")
+        if self.headplane and self.headplane_port in (self.listen_port, 19090, 50443):
+            raise OptionsError("headplane_port clashes with another port used by this app")
+
+
+def load() -> Options:
+    raw = dict(DEFAULTS)
+    raw.update({k: v for k, v in read_json(paths.OPTIONS, {}).items() if v is not None})
+    raw["base_domain"] = str(raw["base_domain"]).lower().strip(".")
+    raw["admin_user"] = str(raw["admin_user"]).lower()
+    return Options(raw)

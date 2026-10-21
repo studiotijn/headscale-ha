@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Headscale</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>Headscale</h1>
+    <nav role="tablist">
+      <button role="tab" data-tab="overview" aria-selected="true" data-i18n="tab_overview">Overview</button>
+      <button role="tab" data-tab="devices" data-i18n="tab_devices">Devices</button>
+      <button role="tab" data-tab="printers" data-i18n="tab_printers">Printers</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="banner" class="banner" hidden></div>
+
+    <!-- Overview -->
+    <section id="tab-overview" class="tab">
+      <div class="grid">
+        <article class="card">
+          <h2 data-i18n="server">Server</h2>
+          <dl id="server-info"></dl>
+        </article>
+        <article class="card">
+          <h2 data-i18n="router">Subnet router</h2>
+          <dl id="router-info"></dl>
+        </article>
+        <article class="card">
+          <h2>Headplane</h2>
+          <p class="muted" data-i18n="headplane_intro">Full admin UI: users, ACL policy, DNS and machines. Sign in with an API key.</p>
+          <div class="actions">
+            <a id="headplane-link" class="btn" target="_blank" rel="noopener" data-i18n="open_headplane">Open Headplane</a>
+            <button id="btn-apikey" class="btn secondary" data-i18n="create_apikey">Create API key</button>
+          </div>
+          <div id="apikey-out" class="secret" hidden></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Devices -->
+    <section id="tab-devices" class="tab" hidden>
+      <article class="card">
+        <h2 data-i18n="add_device">Add a device</h2>
+        <p class="muted" data-i18n="add_device_intro">Create a one-time key, or sign in from the Tailscale app with a custom coordination server.</p>
+        <div class="row">
+          <label><span data-i18n="valid_for">Valid for (hours)</span>
+            <input id="key-hours" type="number" min="1" max="168" value="1"></label>
+          <label class="check"><input id="key-reusable" type="checkbox"> <span data-i18n="reusable">Reusable</span></label>
+          <button id="btn-authkey" class="btn" data-i18n="create_key">Create key</button>
+        </div>
+        <div id="authkey-out" hidden>
+          <p class="label" data-i18n="cli_cmd">Windows / macOS / Linux terminal</p>
+          <pre class="secret" id="authkey-cmd"></pre>
+          <details>
+            <summary data-i18n="mobile_howto">iPhone / Android</summary>
+            <ol class="steps">
+              <li data-i18n="mob1">Install the Tailscale app.</li>
+              <li data-i18n="mob2">iOS: Settings → Tailscale → Alternate coordination server URL. Android: open the app menu and tap the version several times, then “Change server”.</li>
+              <li><span data-i18n="mob3">Enter</span> <code id="login-server"></code></li>
+              <li data-i18n="mob4">Sign in: the app opens a page with a register command. Paste that page's address or command below.</li>
+            </ol>
+          </details>
+        </div>
+        <form id="register-form" class="row register">
+          <label class="grow"><span data-i18n="register_label">Approve a device (auth ID, link or command)</span>
+            <input name="auth_id" required placeholder="headscale auth register --auth-id …"></label>
+          <button class="btn" type="submit" data-i18n="approve">Approve</button>
+        </form>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2 data-i18n="devices">Devices</h2>
+          <button class="btn secondary small" data-refresh="devices" data-i18n="refresh">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th data-i18n="name">Name</th><th data-i18n="owner">Owner</th><th>IP</th>
+              <th data-i18n="status">Status</th><th data-i18n="routes">Routes</th><th></th>
+            </tr></thead>
+            <tbody id="nodes"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <!-- Printers -->
+    <section id="tab-printers" class="tab" hidden>
+      <article class="card">
+        <h2 data-i18n="printers_title">Printers on the tailnet</h2>
+        <p class="muted" data-i18n="printers_intro">Printers you add get a fixed name on the tailnet and are reachable through the subnet router, so you can print from anywhere.</p>
+        <div id="printers"></div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2 data-i18n="find_printers">Find printers</h2>
+        </div>
+        <div class="row">
+          <label class="check"><input id="scan-sweep" type="checkbox"> <span data-i18n="sweep">Also scan ports 631/9100 on</span> <span id="scan-nets"></span></label>
+          <button id="btn-scan" class="btn" data-i18n="scan">Scan network</button>
+        </div>
+        <div id="scan-results"></div>
+        <details class="manual">
+          <summary data-i18n="manual_add">Add manually</summary>
+          <form id="manual-form" class="row wrap">
+            <label><span data-i18n="name">Name</span><input name="name" required></label>
+            <label><span data-i18n="ip_address">IP address</span><input name="ip" required pattern="\d+\.\d+\.\d+\.\d+"></label>
+            <label><span data-i18n="protocol">Protocol</span>
+              <select name="protocol"><option value="ipp">IPP</option><option value="ipps">IPPS</option><option value="raw">RAW (9100)</option><option value="lpd">LPD</option></select></label>
+            <label><span>Port</span><input name="port" type="number" min="1" max="65535" placeholder="631"></label>
+            <label><span data-i18n="resource">Resource</span><input name="resource" placeholder="ipp/print"></label>
+            <button class="btn" type="submit" data-i18n="add">Add</button>
+          </form>
+        </details>
+      </article>
+    </section>
+  </main>
+
+  <template id="tpl-printer">
+    <div class="printer">
+      <div class="printer-head">
+        <div>
+          <strong class="p-name"></strong>
+          <span class="muted p-meta"></span>
+        </div>
+        <div class="actions">
+          <button class="btn secondary small p-test" data-i18n="test">Test</button>
+          <button class="btn danger small p-del" data-i18n="remove">Remove</button>
+        </div>
+      </div>
+      <div class="p-result muted"></div>
+      <details>
+        <summary data-i18n="how_to_connect">How to connect</summary>
+        <ul class="howto"></ul>
+      </details>
+    </div>
+  </template>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

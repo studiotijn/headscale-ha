@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.log
+
+# Local secrets and transfer artifacts: never commit
+finegrained-token.txt
+*token*.txt
+*.tar.gz

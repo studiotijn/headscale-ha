@@ -1,0 +1,64 @@
+configuration:
+  server_url:
+    name: Server-URL
+    description: Publieke URL van Headscale, bijv. https://hs.jouwnaam.duckdns.org. Apparaten verbinden hiermee.
+  tls_mode:
+    name: TLS-modus
+    description: >-
+      letsencrypt = Headscale vraagt zelf een certificaat aan (poort 443 moet vanaf internet bereikbaar zijn);
+      ha_certificate = gebruik een certificaat uit /ssl (bijv. van de Duck DNS- of Let's Encrypt-app);
+      none = gewoon HTTP, alleen als je zelf een reverse proxy ervoor zet.
+  acme_email:
+    name: Let's Encrypt-e-mail
+    description: Optioneel e-mailadres voor meldingen over verlopende certificaten.
+  certfile:
+    name: Certificaatbestand
+    description: Bestand in /ssl, voor TLS-modus ha_certificate.
+  keyfile:
+    name: Sleutelbestand
+    description: Bestand in /ssl, voor TLS-modus ha_certificate.
+  listen_port:
+    name: Luisterpoort
+    description: TCP-poort waarop Headscale (en de DERP-relay) luistert. Stel port forwarding in op je router.
+  derp_enabled:
+    name: Ingebouwde DERP-relay
+    description: Verkeer via je eigen server doorsturen als apparaten niet direct kunnen verbinden. De STUN-poort (UDP) moet geforward zijn.
+  stun_port:
+    name: STUN-poort (UDP)
+    description: UDP-poort van de STUN-server van de ingebouwde DERP.
+  tailscale_derp_fallback:
+    name: Tailscale-relays als reserve
+    description: Ook de publieke DERP-relays van Tailscale aanbieden. Verkeer blijft end-to-end versleuteld; alleen metadata gaat via hen.
+  base_domain:
+    name: Tailnet-domein
+    description: MagicDNS-domein voor je apparaten, bijv. tailnet.home. Mag niet overlappen met het domein van de server-URL.
+  nameservers:
+    name: DNS-servers
+    description: DNS-servers die apparaten in het tailnet krijgen.
+  admin_user:
+    name: Beheerder
+    description: Headscale-gebruiker die eigenaar is van apparaten die je hier toevoegt en volledige toegang krijgt in het eerste ACL-beleid.
+  node_expiry_days:
+    name: Verloop apparaatsleutel (dagen)
+    description: Apparaten moeten na zoveel dagen opnieuw inloggen. 0 = nooit (afgeraden). Getagde apparaten verlopen nooit.
+  subnet_router:
+    name: Subnet-router
+    description: Maak je thuisnetwerk (en toegevoegde printers) bereikbaar vanuit het tailnet.
+  advertise_routes:
+    name: Te adverteren routes
+    description: Netwerken die bereikbaar worden, bijv. 192.168.1.0/24. Leeg = het LAN van de Home Assistant-host.
+  exit_node:
+    name: Exit-node
+    description: Apparaten mogen al hun internetverkeer via je thuisverbinding sturen.
+  userspace_networking:
+    name: Userspace-netwerk
+    description: Subnet-router zonder kernel-netwerkinterface. Aanbevolen; zet alleen uit als je kernel-routing nodig hebt.
+  headplane:
+    name: Headplane-beheer-UI
+    description: Draai de Headplane-webinterface op je LAN voor gebruikers, ACL's en DNS.
+  headplane_port:
+    name: Headplane-poort
+    description: TCP-poort van Headplane op je LAN (http://homeassistant.local:POORT/admin). Forward deze poort niet.
+  log_level:
+    name: Logniveau
+    description: Hoeveel de app logt.

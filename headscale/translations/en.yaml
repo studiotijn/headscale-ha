@@ -1,0 +1,64 @@
+configuration:
+  server_url:
+    name: Server URL
+    description: Public URL of Headscale, e.g. https://hs.yourname.duckdns.org. Clients use this to connect.
+  tls_mode:
+    name: TLS mode
+    description: >-
+      letsencrypt = Headscale requests its own certificate (needs port 443 reachable from the internet);
+      ha_certificate = use a certificate from /ssl (e.g. from the Duck DNS or Let's Encrypt app);
+      none = plain HTTP, only when you put your own reverse proxy in front.
+  acme_email:
+    name: Let's Encrypt e-mail
+    description: Optional e-mail address for certificate expiry notices.
+  certfile:
+    name: Certificate file
+    description: File in /ssl, used with tls_mode ha_certificate.
+  keyfile:
+    name: Private key file
+    description: File in /ssl, used with tls_mode ha_certificate.
+  listen_port:
+    name: Listen port
+    description: TCP port Headscale (and the DERP relay) listens on. Forward it from your router.
+  derp_enabled:
+    name: Embedded DERP relay
+    description: Relay traffic through your own server when devices cannot connect directly. Needs the STUN port forwarded (UDP).
+  stun_port:
+    name: STUN port (UDP)
+    description: UDP port of the embedded DERP's STUN server.
+  tailscale_derp_fallback:
+    name: Tailscale relays as fallback
+    description: Also offer Tailscale's public DERP relays. Traffic stays end-to-end encrypted; only metadata passes through them.
+  base_domain:
+    name: Tailnet domain
+    description: MagicDNS domain for your devices, e.g. tailnet.home. Must not overlap with the server URL's domain.
+  nameservers:
+    name: DNS servers
+    description: DNS servers pushed to devices on the tailnet.
+  admin_user:
+    name: Admin user
+    description: Headscale user that owns devices added from this panel and gets full access in the initial ACL policy.
+  node_expiry_days:
+    name: Device key expiry (days)
+    description: Devices must sign in again after this many days. 0 disables expiry (not recommended). Tagged devices never expire.
+  subnet_router:
+    name: Subnet router
+    description: Make your home network (and added printers) reachable from the tailnet.
+  advertise_routes:
+    name: Routes to advertise
+    description: Networks to make reachable, e.g. 192.168.1.0/24. Leave empty to use the Home Assistant host's LAN.
+  exit_node:
+    name: Exit node
+    description: Allow devices to send all their internet traffic through your home connection.
+  userspace_networking:
+    name: Userspace networking
+    description: Run the subnet router without a kernel network interface. Recommended; turn off only if you need kernel routing.
+  headplane:
+    name: Headplane admin UI
+    description: Run the Headplane web interface on your LAN for users, ACLs and DNS.
+  headplane_port:
+    name: Headplane port
+    description: TCP port for Headplane on your LAN (http://homeassistant.local:PORT/admin). Do not forward this port.
+  log_level:
+    name: Log level
+    description: Verbosity of the app log.

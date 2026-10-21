@@ -1,0 +1,14 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Headplane admin UI (runs unprivileged)
+# ==============================================================================
+if ! bashio::config.true 'headplane'; then
+    bashio::log.info "Headplane disabled"
+    exec sleep infinity
+fi
+
+export HEADPLANE_CONFIG_PATH=/data/headplane/config.yaml
+cd /app || bashio::exit.nok "Headplane is missing from the image"
+bashio::log.info "Starting Headplane on port $(bashio::config 'headplane_port')"
+exec s6-setuidgid headplane node /app/build/server/index.js

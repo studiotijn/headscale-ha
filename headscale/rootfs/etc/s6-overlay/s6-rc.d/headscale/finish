@@ -1,0 +1,27 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Restart Headscale a few times, then stop the app so the error is visible.
+# ==============================================================================
+readonly exit_code="${1}"
+readonly counter=/run/hsha/headscale-failures
+
+if [[ "${exit_code}" -eq 0 ]] || [[ "${exit_code}" -eq 256 ]]; then
+    exit 0
+fi
+
+# A run of more than 10 minutes counts as healthy: start counting again.
+started=$(cat /run/hsha/headscale-started 2>/dev/null || echo 0)
+if (( $(date +%s) - started > 600 )); then
+    echo 0 > "${counter}"
+fi
+failures=$(( $(cat "${counter}" 2>/dev/null || echo 0) + 1 ))
+echo "${failures}" > "${counter}"
+bashio::log.warning "Headscale exited with code ${exit_code} (failure ${failures}/5)"
+
+if [[ "${failures}" -ge 5 ]]; then
+    bashio::log.error "Headscale keeps failing; stopping the app. Check the log above."
+    echo "${exit_code}" > /run/s6-linux-init-container-results/exitcode
+    exec /run/s6/basedir/bin/halt
+fi
+sleep 3

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-app:
+    name: App lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Home Assistant app linter
+        uses: frenck/action-addon-linter@v2.21.1
+        with:
+          path: "./headscale"
+
+  python:
+    name: Python lint & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r headscale/requirements.txt pytest ruff
+      - run: ruff check . && ruff format --check .
+      - run: pytest -q
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: |
+          shellcheck -s bash \
+            headscale/rootfs/etc/s6-overlay/scripts/*.sh \
+            headscale/rootfs/etc/s6-overlay/s6-rc.d/*/run \
+            headscale/rootfs/etc/s6-overlay/s6-rc.d/*/finish \
+            tests/*.sh
+
+  smoke:
+    name: Build & smoke test (amd64)
+    runs-on: ubuntu-latest
+    needs: [python, shellcheck]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ./headscale
+          platforms: linux/amd64
+          load: true
+          tags: headscale-ha:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: tests/smoke.sh headscale-ha:test
+
+  build-arm64:
+    name: Build (aarch64)
+    runs-on: ubuntu-latest
+    needs: [python, shellcheck]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: docker/setup-qemu-action@v4.4.0
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ./headscale
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64

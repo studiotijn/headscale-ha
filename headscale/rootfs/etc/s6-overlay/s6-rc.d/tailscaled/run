@@ -1,0 +1,32 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Tailscale daemon acting as subnet router (and optional exit node) for the LAN.
+# Registration and route approval are handled by the web UI process (hsha.manager).
+# ==============================================================================
+if ! bashio::config.true 'subnet_router'; then
+    bashio::log.info "Subnet router disabled"
+    exec sleep infinity
+fi
+
+declare -a options=(
+    "--state=/data/tailscale/tailscaled.state"
+    "--statedir=/data/tailscale"
+    "--socket=/run/tailscale/tailscaled.sock"
+    "--port=41641"
+    "--no-logs-no-support"
+)
+
+if bashio::config.true 'userspace_networking'; then
+    options+=("--tun=userspace-networking")
+else
+    if [[ ! -c /dev/net/tun ]]; then
+        bashio::log.warning "/dev/net/tun missing, falling back to userspace networking"
+        options+=("--tun=userspace-networking")
+    else
+        options+=("--tun=tailscale0")
+    fi
+fi
+
+bashio::log.info "Starting tailscaled (${options[*]: -1})"
+exec tailscaled "${options[@]}"
