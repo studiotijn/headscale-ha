@@ -24,7 +24,6 @@ ingress_port: 0
 ingress_stream: true
 panel_icon: mdi:vpn
 panel_title: Headscale
-panel_admin: true
 
 hassio_api: true
 # manager: needed for the in-app "check for updates / update / rebuild" buttons.

@@ -15,6 +15,10 @@ cleanup() {
         echo "::group::container log"
         docker logs "${NAME}" 2>&1 | tail -n 200 || true
         echo "::endgroup::"
+        # Also as an annotation: readable through the API without downloading the log.
+        local tail_log
+        tail_log=$(docker logs "${NAME}" 2>&1 | tail -n 60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+        echo "::error title=Smoke test container log (last 60 lines)::${tail_log}"
     fi
     docker rm -f "${NAME}" >/dev/null 2>&1 || true
     sudo rm -rf "${DATA}" 2>/dev/null || rm -rf "${DATA}"
@@ -61,6 +65,7 @@ wait_for() {
     until "$@" >/dev/null 2>&1; do
         if ((SECONDS > deadline)); then
             echo "FAIL: ${what}"
+            echo "::error title=Smoke test failed::${what}"
             return 1
         fi
         sleep 2
