@@ -66,4 +66,4 @@ LABEL \
     org.opencontainers.image.title="Home Assistant App: Headscale" \
     org.opencontainers.image.description="Headscale, Headplane, subnet router and remote printing for Home Assistant." \
     org.opencontainers.image.source="https://github.com/studiotijn/headscale-ha" \
-    org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.licenses="Apache-2.0"

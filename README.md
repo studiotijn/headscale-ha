@@ -44,4 +44,4 @@ docker build -t headscale-ha:test headscale && tests/smoke.sh headscale-ha:test
 
 ## License
 
-MIT
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for the bundled third-party software.

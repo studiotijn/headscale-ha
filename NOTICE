@@ -1,0 +1,10 @@
+Headscale for Home Assistant
+Copyright 2026 Tijn Huttenhuis
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The container image built from this repository includes third-party software
+under its own licenses:
+- Headscale (https://github.com/juanfont/headscale), BSD 3-Clause License
+- Tailscale (https://github.com/tailscale/tailscale), BSD 3-Clause License
+- Headplane (https://github.com/tale/headplane), MIT License
