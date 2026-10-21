@@ -47,6 +47,15 @@ def main(argv: list[str]) -> int:
     if setup and setup.get("reason") in ("unconfigured", "invalid"):
         print(f"[hsha] {service}: waiting for the setup wizard ({setup['reason']})", flush=True)
         return 1
+    if service == "headplane":
+        # Headplane polls Headscale every 30 s. Without a certificate every poll makes
+        # Headscale ask Let's Encrypt again, which quickly hits the hourly failure limit.
+        opts = load()
+        cert = paths.HS_DIR / "cache" / opts.server_host
+        if opts.tls_mode == "letsencrypt" and not cert.exists():
+            print("[hsha] headplane: waiting until Headscale has its Let's Encrypt certificate", flush=True)
+            return 1
+        return 0
     if service != "headscale":
         return 0
     ports = check_ports()

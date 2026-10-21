@@ -41,7 +41,7 @@ async def json_errors(request: web.Request, handler):
         return await handler(request)
     except web.HTTPException:
         raise
-    except (hs.HeadscaleError, ValueError, KeyError) as exc:
+    except (hs.HeadscaleError, supervisor.SupervisorError, ValueError, KeyError) as exc:
         return web.json_response({"error": str(exc)}, status=400)
     except Exception as exc:
         log.exception("Unhandled error on %s", request.path)
@@ -200,6 +200,39 @@ class App:
             raise ValueError(str(exc)) from exc
         return web.json_response(result)
 
+    # ---------------------------------------------------------------- update
+    async def update_get(self, _request: web.Request) -> web.Response:
+        info = await asyncio.to_thread(supervisor.self_info)
+        return web.json_response(
+            {
+                "version": info.get("version") or __version__,
+                "version_latest": info.get("version_latest"),
+                "update_available": bool(info.get("update_available")),
+                "auto_update": info.get("auto_update"),
+                "available": supervisor.available(),
+            }
+        )
+
+    async def update_post(self, request: web.Request) -> web.Response:
+        """check: reload the app store (git pull of the repository); update/rebuild: replace this app."""
+        action = (await request.json()).get("action")
+        info = await asyncio.to_thread(supervisor.self_info)
+        slug = info.get("slug")
+        if not slug:
+            raise ValueError("Supervisor API not available")
+        if action == "check":
+            await asyncio.to_thread(supervisor.store_reload)
+            return await self.update_get(request)
+        if action in ("update", "rebuild"):
+            if action == "rebuild":
+                # Pull the newest code from the repository first; rebuild uses that checkout.
+                await asyncio.to_thread(supervisor.store_reload)
+            func = supervisor.update_self if action == "update" else supervisor.rebuild_self
+            # Run after the response: the Supervisor stops this container while it works.
+            asyncio.get_running_loop().call_later(0.5, lambda: asyncio.ensure_future(asyncio.to_thread(func, slug)))
+            return web.json_response({"started": action})
+        raise ValueError(f"Unknown action {action}")
+
     async def qr(self, request: web.Request) -> web.Response:
         import io
 
@@ -293,6 +326,8 @@ class App:
         app.router.add_post("/api/wizard/skip", self.wizard_skip)
         app.router.add_post("/api/wizard/options", self.wizard_options)
         app.router.add_get("/api/qr", self.qr)
+        app.router.add_get("/api/update", self.update_get)
+        app.router.add_post("/api/update", self.update_post)
         app.router.add_get("/api/printers", self.printers_list)
         app.router.add_post("/api/printers/scan", self.printers_scan)
         app.router.add_post("/api/printers", self.printers_add)

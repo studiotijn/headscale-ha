@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Headscale
-version: "0.2.0"
+version: "0.2.1"
 slug: headscale
 description: >-
   Self-hosted Tailscale control server (Headscale) with built-in TLS, DERP relay,
@@ -27,7 +27,8 @@ panel_title: Headscale
 panel_admin: true
 
 hassio_api: true
-hassio_role: default
+# manager: needed for the in-app "check for updates / update / rebuild" buttons.
+hassio_role: manager
 privileged:
   - NET_ADMIN
   - NET_RAW

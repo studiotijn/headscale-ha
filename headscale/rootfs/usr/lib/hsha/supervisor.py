@@ -143,3 +143,29 @@ def other_tailscale_apps() -> list[dict]:
         if slug.endswith("tailscale") or "tailscale" in str(app.get("name", "")).lower():
             out.append({"slug": slug, "name": app.get("name"), "state": app.get("state")})
     return out
+
+
+def self_info() -> dict:
+    return _get("/addons/self/info") or {}
+
+
+def store_reload() -> None:
+    _post("/store/reload", timeout=120)
+
+
+def update_self(slug: str) -> None:
+    # The Supervisor replaces this container while handling the call; a lost
+    # connection afterwards is expected.
+    try:
+        _post(f"/store/addons/{slug}/update", {"backup": False}, timeout=600)
+    except SupervisorError as exc:
+        if "connection" not in str(exc).lower() and "remote end" not in str(exc).lower():
+            raise
+
+
+def rebuild_self(slug: str) -> None:
+    try:
+        _post(f"/addons/{slug}/rebuild", timeout=600)
+    except SupervisorError as exc:
+        if "connection" not in str(exc).lower() and "remote end" not in str(exc).lower():
+            raise

@@ -23,6 +23,10 @@ const STRINGS = {
     manual_add: "Handmatig toevoegen", ip_address: "IP-adres", protocol: "Protocol", resource: "Resource", add: "Toevoegen",
     test: "Testen", remove: "Verwijderen", how_to_connect: "Zo maak je verbinding",
     online: "online", offline: "offline", never: "nooit", expire: "Uitloggen", delete: "Verwijderen",
+    app_version: "App-versie", upd_check: "Controleren op updates", upd_update: "Bijwerken", upd_rebuild: "Herbouwen",
+    upd_hint: "Herbouwen installeert de nieuwste code van GitHub, ook als het versienummer niet veranderde (om te testen).",
+    upd_installed: "Geïnstalleerd", upd_latest: "Nieuwste", upd_auto: "Automatisch bijwerken", upd_uptodate: "Je hebt de nieuwste versie.",
+    upd_running: "Bezig met {action}… De app wordt gebouwd en herstart; dit duurt een paar minuten.", upd_confirm: "De app wordt opnieuw gebouwd en herstart. Doorgaan?",
     no_devices: "Nog geen apparaten.", approve_routes: "Routes goedkeuren", none_yet: "Nog geen printers toegevoegd.", scanning: "Bezig met scannen…",
     nothing_found: "Geen printers gevonden. Probeer de poortscan of voeg handmatig toe.", added: "toegevoegd",
     confirm_delete: "Apparaat verwijderen?", confirm_remove_printer: "Printer verwijderen?",
@@ -43,6 +47,10 @@ const STRINGS = {
   en: {
     tab_overview: "Overview", tab_setup: "Setup", tab_devices: "Devices", tab_printers: "Printers",
     online: "online", offline: "offline", never: "never", expire: "Log out", delete: "Delete",
+    app_version: "App version", upd_check: "Check for updates", upd_update: "Update", upd_rebuild: "Rebuild",
+    upd_hint: "Rebuild installs the newest code from GitHub even when the version number did not change (for testing).",
+    upd_installed: "Installed", upd_latest: "Latest", upd_auto: "Auto update", upd_uptodate: "You have the latest version.",
+    upd_running: "Running {action}… The app is being built and restarted; this takes a few minutes.", upd_confirm: "The app will be rebuilt and restarted. Continue?",
     no_devices: "No devices yet.", approve_routes: "Approve routes", none_yet: "No printers added yet.", scanning: "Scanning…",
     nothing_found: "No printers found. Try the port scan or add one manually.", added: "added",
     confirm_delete: "Delete this device?", confirm_remove_printer: "Remove this printer?",
@@ -165,6 +173,7 @@ async function loadStatus() {
   else link.hidden = true;
   $("#login-server").textContent = s.server_url;
   if (typeof renderProgressCard === "function") renderProgressCard().catch(() => {});
+  loadUpdate().catch(() => {});
   const msgs = [s.error, ...(s.warnings || [])].filter(Boolean);
   banner(msgs.join(" · "), s.error ? "error" : "warn");
   return s;
@@ -179,6 +188,54 @@ $("#btn-apikey").addEventListener("click", async (e) => {
     out.hidden = false;
   } catch (err) { banner(err.message); } finally { busy(e.target, false); }
 });
+
+// ---------------------------------------------------------------- app updates
+async function loadUpdate(data) {
+  const u = data || await api("update");
+  dl($("#update-info"), [
+    [t("upd_installed"), u.version],
+    [t("upd_latest"), u.version_latest || "?"],
+    [t("upd_auto"), u.auto_update ? t("yes") : t("no")],
+  ]);
+  $("#btn-upd-update").hidden = !u.update_available;
+  return u;
+}
+
+$("#btn-upd-check").addEventListener("click", async (e) => {
+  busy(e.target, true);
+  try {
+    const u = await loadUpdate(await api("update", { method: "POST", body: { action: "check" } }));
+    if (!u.update_available) banner(t("upd_uptodate"), "ok");
+  } catch (err) { banner(err.message); } finally { busy(e.target, false); }
+});
+
+for (const action of ["update", "rebuild"]) {
+  $(`#btn-upd-${action}`).addEventListener("click", async (e) => {
+    if (!confirm(t("upd_confirm"))) return;
+    busy(e.target, true);
+    try {
+      await api("update", { method: "POST", body: { action } });
+      $("#overlay-text").textContent = t("upd_running").replace("{action}", t(`upd_${action}`).toLowerCase());
+      $("#overlay").hidden = false;
+      waitForRestartGeneric(600000);
+    } catch (err) { banner(err.message); busy(e.target, false); }
+  });
+}
+
+function waitForRestartGeneric(maxMs) {
+  const started = Date.now();
+  let sawDown = false;
+  const tick = async () => {
+    try {
+      const res = await fetch("api/status", { cache: "no-store" });
+      if (res.ok && sawDown) { location.reload(); return; }
+      if (!res.ok) sawDown = true;
+    } catch { sawDown = true; }
+    if (Date.now() - started > maxMs) { location.reload(); return; }
+    setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 5000);
+}
 
 // ---------------------------------------------------------------- devices
 async function loadNodes() {

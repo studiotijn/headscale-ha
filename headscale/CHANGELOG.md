@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- App version card on the overview with *Check for updates*, *Update* and *Rebuild*
+  (*Rebuild* installs the newest code from GitHub even without a version bump, for quick tests).
+  The app now uses the Supervisor role `manager` for this.
+- Fix: Headplane polled Headscale every 30 s before a certificate existed, and every poll
+  triggered a new Let's Encrypt attempt. With `letsencrypt`, Headplane now starts only once
+  the certificate has been issued.
+
 ## 0.2.0
 
 - Setup wizard in the sidebar panel: nine steps with automatic checks, green check marks,
