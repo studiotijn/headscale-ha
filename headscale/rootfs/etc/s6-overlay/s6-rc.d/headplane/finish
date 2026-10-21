@@ -1,5 +1,5 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
 # Restart after a short pause instead of busy-looping.
-[[ "${1}" -ne 0 ]] && [[ "${1}" -ne 256 ]] && bashio::log.warning "$(basename "$(dirname "${0}")") exited with code ${1}, restarting"
+[[ "${1}" -ne 0 ]] && [[ "${1}" -ne 256 ]] && bashio::log.warning "headplane exited with code ${1}, restarting"
 sleep 3

@@ -66,13 +66,24 @@ class Options:
             return f"https://{self.server_host}{port}"
         return f"http://127.0.0.1:{self.listen_port}"
 
+    @property
+    def configured(self) -> bool:
+        """False while server_url still holds the placeholder from the defaults."""
+        host = self.server_host
+        return bool(host) and "example" not in host.split(".")
+
+    @property
+    def external_port(self) -> int:
+        """Port clients (and the router's port forward) use from the internet."""
+        url = urlsplit(self.server_url)
+        return url.port or (443 if url.scheme == "https" else 80)
+
     def warnings(self) -> list[str]:
         out = []
-        if self.tls_mode == "letsencrypt" and self.listen_port != 443:
+        if self.tls_mode == "letsencrypt" and self.external_port != 443:
             out.append(
-                "tls_mode letsencrypt uses the TLS-ALPN-01 challenge, which Let's Encrypt "
-                "always performs on port 443. Forward external port 443 to "
-                f"listen_port {self.listen_port} or certificates cannot be issued."
+                "tls_mode letsencrypt uses the TLS-ALPN-01 challenge, which Let's Encrypt always performs "
+                "on external port 443, but server_url uses another port. Use tls_mode ha_certificate instead."
             )
         if not self.derp_enabled and self.tailscale_derp_fallback:
             out.append("Embedded DERP disabled: relayed traffic goes through Tailscale's public DERP servers.")

@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import os
+import urllib.error
 import urllib.request
 
 log = logging.getLogger(__name__)
@@ -72,3 +73,73 @@ def lan_ip() -> str | None:
         return os.environ["HSHA_LAN_IP"]
     ifaces = lan_interfaces()
     return str(ifaces[0].ip) if ifaces else None
+
+
+class SupervisorError(RuntimeError):
+    pass
+
+
+def available() -> bool:
+    return bool(os.environ.get("SUPERVISOR_TOKEN"))
+
+
+def _post(path: str, payload: dict | None = None, timeout: float = 30) -> dict:
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        raise SupervisorError("Supervisor API not available")
+    data = json.dumps(payload or {}).encode()
+    req = urllib.request.Request(
+        f"{SUPERVISOR}{path}",
+        data=data,
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode())
+        except Exception:
+            body = {}
+        raise SupervisorError(body.get("message") or f"HTTP {exc.code}") from exc
+    except Exception as exc:
+        raise SupervisorError(str(exc)) from exc
+    if body.get("result") != "ok":
+        raise SupervisorError(body.get("message") or "Supervisor refused the request")
+    return body.get("data") or {}
+
+
+def self_options() -> dict | None:
+    info = _get("/addons/self/info")
+    return dict(info["options"]) if info and isinstance(info.get("options"), dict) else None
+
+
+def validate_options(options: dict) -> None:
+    result = _post("/addons/self/options/validate", options)
+    if result and result.get("valid") is False:
+        raise SupervisorError(result.get("message") or "Invalid options")
+
+
+def save_options(options: dict) -> None:
+    _post("/addons/self/options", {"options": options})
+
+
+def restart_self() -> None:
+    # The Supervisor stops this container while handling the call, so the
+    # response may never arrive; that is expected.
+    try:
+        _post("/addons/self/restart", timeout=5)
+    except SupervisorError as exc:
+        log.info("Restart requested (%s)", exc)
+
+
+def other_tailscale_apps() -> list[dict]:
+    """Other Tailscale apps (e.g. the community Tailscale app) that compete for port 41641 / routes."""
+    data = _get("/addons") or {}
+    out = []
+    for app in data.get("addons", []):
+        slug = str(app.get("slug", ""))
+        if slug.endswith("tailscale") or "tailscale" in str(app.get("name", "")).lower():
+            out.append({"slug": slug, "name": app.get("name"), "state": app.get("state")})
+    return out

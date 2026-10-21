@@ -19,6 +19,7 @@ from . import __version__, hs, ipp, paths, printers, supervisor
 from .manager import Manager
 from .options import load
 from .store import read_json
+from .wizard import Wizard
 
 log = logging.getLogger("hsha.web")
 
@@ -73,6 +74,7 @@ class App:
     def __init__(self):
         self.opts = load()
         self.manager = Manager(self.opts)
+        self.wizard = Wizard(self)
         self.started = int(time.time())
 
     # ---------------------------------------------------------------- status
@@ -170,7 +172,47 @@ class App:
         return web.json_response({"ok": True})
 
     async def apikey(self, _request: web.Request) -> web.Response:
-        return web.json_response({"key": await hs.create_apikey("90d"), "days": 90})
+        key = await hs.create_apikey("90d")
+        self.wizard.mark("apikey_created")
+        return web.json_response({"key": key, "days": 90})
+
+    # ---------------------------------------------------------------- wizard
+    async def wizard_get(self, request: web.Request) -> web.Response:
+        refresh = request.query.get("refresh") == "1"
+        force_tls = request.query.get("tls") == "1"
+        return web.json_response(await self.wizard.evaluate(refresh=refresh, force_tls=force_tls))
+
+    async def wizard_answer(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        self.wizard.answer(str(body.get("key")), body.get("value"))
+        return web.json_response(await self.wizard.evaluate())
+
+    async def wizard_skip(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        self.wizard.skip(str(body.get("step")), bool(body.get("skipped", True)))
+        return web.json_response(await self.wizard.evaluate())
+
+    async def wizard_options(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        try:
+            result = await self.wizard.apply_options(body.get("changes") or {})
+        except supervisor.SupervisorError as exc:
+            raise ValueError(str(exc)) from exc
+        return web.json_response(result)
+
+    async def qr(self, request: web.Request) -> web.Response:
+        import io
+
+        import segno
+
+        text = request.query.get("text", "")[:512]
+        if not text:
+            raise web.HTTPBadRequest()
+        buf = io.BytesIO()
+        segno.make(text, error="m").save(buf, kind="svg", scale=5, border=2, dark="#000", light="#fff")
+        return web.Response(
+            body=buf.getvalue(), content_type="image/svg+xml", headers={"Cache-Control": "max-age=3600"}
+        )
 
     # -------------------------------------------------------------- printers
     def _printer_view(self, p: dict) -> dict:
@@ -246,6 +288,11 @@ class App:
         app.router.add_post("/api/authkey", self.authkey)
         app.router.add_post("/api/register", self.register)
         app.router.add_post("/api/apikey", self.apikey)
+        app.router.add_get("/api/wizard", self.wizard_get)
+        app.router.add_post("/api/wizard/answer", self.wizard_answer)
+        app.router.add_post("/api/wizard/skip", self.wizard_skip)
+        app.router.add_post("/api/wizard/options", self.wizard_options)
+        app.router.add_get("/api/qr", self.qr)
         app.router.add_get("/api/printers", self.printers_list)
         app.router.add_post("/api/printers/scan", self.printers_scan)
         app.router.add_post("/api/printers", self.printers_add)

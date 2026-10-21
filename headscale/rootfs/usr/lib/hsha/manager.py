@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from . import hs, paths, supervisor, tailscale
+from . import hs, netcheck, paths, supervisor, tailscale
 from .options import Options
 from .policy import ROUTER_TAG, initial_policy
 from .store import load_state, read_json, save_state, write_json
@@ -27,6 +27,9 @@ class Manager:
         self.error: str | None = None
         self.router: dict = {"enabled": bool(opts.subnet_router), "state": "starting"}
         self._applied_routes: tuple | None = None
+        self._router_parked = False
+        self.tls: dict | None = None
+        self._tls_at = 0.0
         self._lock = asyncio.Lock()
         self._wake = asyncio.Event()
         self.lan = supervisor.lan_interfaces()
@@ -58,6 +61,32 @@ class Manager:
     def desired_routes(self) -> list[str]:
         return sorted(set(self.lan_routes()) | set(self.printer_routes()))
 
+    # ------------------------------------------------------------------- TLS
+    async def tls_probe(self, force: bool = False) -> dict:
+        """Check the served certificate like a client does.
+
+        Without a certificate each check triggers a Let's Encrypt validation, and
+        Let's Encrypt blocks a hostname for an hour after 5 failures. Automatic
+        checks are therefore rare until the user confirms the port forwards.
+        """
+        if not self.opts.tls:
+            return {"ok": True, "skipped": True}
+        now = time.monotonic()
+        forwards_done = self.state.get("wizard", {}).get("answers", {}).get("forwards_done")
+        cert_cached = (paths.HS_DIR / "cache" / self.opts.server_host).exists()
+        safe = self.opts.tls_mode == "ha_certificate" or cert_cached or forwards_done
+        if not force:
+            if not safe:
+                return {"ok": False, "error": "not_checked"}
+            max_age = 300 if (self.tls and self.tls.get("ok")) else 900
+            if self.tls is not None and now - self._tls_at < max_age:
+                return self.tls
+        self.tls = await asyncio.to_thread(netcheck.tls_check, self.opts.server_host, int(self.opts.listen_port), 20)
+        self._tls_at = time.monotonic()
+        if self.tls.get("ok"):
+            self.poke()
+        return self.tls
+
     # ------------------------------------------------------------- bootstrap
     async def bootstrap(self) -> None:
         await hs.wait_healthy(timeout=300)
@@ -84,6 +113,19 @@ class Manager:
         status = await tailscale.status()
         backend = status.get("BackendState")
         if backend in ("NeedsLogin", "NoState", "Stopped", "NeedsMachineAuth") or not status.get("Self"):
+            # Every TLS handshake without a certificate makes Headscale ask Let's Encrypt
+            # again, and 5 failed validations per hour block the hostname. Only log in
+            # once a trusted certificate is actually served.
+            tls = await self.tls_probe()
+            if not tls.get("ok"):
+                if not self._router_parked:
+                    with contextlib.suppress(tailscale.TailscaleError):
+                        await tailscale.run("down")
+                    self._router_parked = True
+                    log.info("Subnet router waits until Headscale serves a valid certificate")
+                self.router = {"enabled": True, "state": "waiting for certificate", "routes": routes}
+                return
+            self._router_parked = False
             log.info("Registering the subnet router with Headscale")
             key = await hs.create_preauthkey(tags=[ROUTER_TAG], expiration="10m")
             await tailscale.up(self.opts.internal_url, key, routes, exit_node)
@@ -189,6 +231,13 @@ class Manager:
 
     async def run(self) -> None:
         while not self.ready:
+            setup = read_json(paths.RUNTIME, {}).get("setup_mode")
+            if setup:
+                # Headscale is not started yet; the setup wizard explains why.
+                self.error = None
+                self.router = {"enabled": bool(self.opts.subnet_router), "state": "waiting for setup"}
+                await asyncio.sleep(5)
+                continue
             try:
                 await self.bootstrap()
                 self.error = None

@@ -8,6 +8,11 @@ if ! bashio::config.true 'headplane'; then
     exec sleep infinity
 fi
 
+if ! python3 -m hsha.gate headplane; then
+    sleep 30
+    exit 0
+fi
+
 export HEADPLANE_CONFIG_PATH=/data/headplane/config.yaml
 cd /app || bashio::exit.nok "Headplane is missing from the image"
 bashio::log.info "Starting Headplane on port $(bashio::config 'headplane_port')"

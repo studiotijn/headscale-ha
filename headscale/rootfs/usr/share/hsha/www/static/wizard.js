@@ -1,0 +1,596 @@
+"use strict";
+/* Setup wizard. Uses the helpers from app.js ($, el, api, t, STRINGS, LANG, copyable, banner, busy, loaders, show). */
+
+Object.assign(STRINGS.nl, {
+  wiz_title: "Installatie-assistent",
+  wiz_intro: "Loop de stappen door. Elke stap wordt automatisch getest en krijgt een groen vinkje als hij klaar is. Klik op ⓘ voor uitleg.",
+  wiz_progress: "Ingesteld", wiz_open: "Open de installatie-assistent", wiz_next: "Volgende stap", wiz_done_all: "Alles is ingesteld.",
+  wiz_retest: "Opnieuw testen", wiz_save: "Opslaan en herstarten", wiz_skip: "Overslaan", wiz_unskip: "Toch doen",
+  wiz_optional: "optioneel", wiz_restarting: "De app herstart met de nieuwe instellingen… Dit duurt meestal 10 tot 30 seconden.",
+  wiz_saved_norestart: "Opgeslagen (geen herstart nodig).", wiz_no_supervisor: "Ontwikkelmodus: opgeslagen in options.json.",
+  st_ok: "Klaar", st_todo: "Te doen", st_warn: "Let op", st_fail: "Probleem", st_skipped: "Overgeslagen",
+  setup_unconfigured: "Headscale start pas als stap 1 is ingevuld.",
+  setup_invalid: "De instellingen kloppen nog niet, Headscale wacht:",
+  setup_port_in_use: "Headscale wacht: poort {ports} is op deze Home Assistant al in gebruik. Zie stap 2.",
+
+  // 1 address
+  s_address: "Serveradres",
+  s_address_sum: "Het adres waarmee je apparaten Headscale vinden.",
+  i_address: "Je apparaten verbinden met Headscale via een vast internetadres. Met Duck DNS werkt elk subdomein automatisch: als je HA op vll6.duckdns.org staat, wijst hs.vll6.duckdns.org ook naar je huis. Zo houden Home Assistant en Headscale elk hun eigen naam. Verander dit adres later liever niet, want dan moeten alle apparaten opnieuw inloggen.\n\nTailnet-domein: de achternaam van je apparaten in het VPN (laptop.tailnet.home). Mag niet eindigen op je Duck DNS-domein.\n\nBeheerder: jouw gebruikersnaam in Headscale. Jouw apparaten vallen hieronder en krijgen volledige toegang.",
+  f_server_url: "Serveradres", f_admin_user: "Beheerder (gebruikersnaam)", f_base_domain: "Tailnet-domein",
+  use_suggestion: "Gebruik {x}",
+  dns_ok: "{host} wijst naar {ip}, dat is je publieke IP-adres.",
+  dns_mismatch: "{host} wijst naar {resolved}, maar je publieke IP-adres is {ip}. Werkt je Duck DNS-app nog? Die werkt het adres normaal elke paar minuten bij.",
+  dns_missing: "{host} bestaat (nog) niet in DNS. Controleer de spelling. Bij Duck DNS werkt elk subdomein van je eigen naam.",
+  dns_error: "DNS controleren lukte niet ({err}). Heeft Home Assistant internet?",
+  cgnat: "Je publieke IP-adres ({ip}) ligt in een CGNAT-bereik: je provider deelt het met anderen en binnenkomende verbindingen kunnen niet. Vraag je provider om een eigen publiek IPv4-adres.",
+
+  // 2 ports
+  s_ports: "Port forwarding",
+  s_ports_sum: "Je router laat verkeer van buiten door naar Headscale.",
+  i_ports: "Je router moet twee soorten verkeer doorsturen naar de computer waar Home Assistant op draait:\n• TCP {ext} → {lan}:{port}: Headscale zelf, de DERP-relay en het Let's Encrypt-certificaat.\n• UDP {stun} → {lan}:{stun}: STUN. Hiermee vinden apparaten een directe route naar elkaar. Zonder deze poort werkt alles nog, maar dan via de relay (trager).\n• Optioneel UDP 41641 → {lan}:41641: directe verbinding met de subnet-router.\n\nUniFi: Instellingen → Routing (of Firewall & Security) → Port Forwarding → ‘Create Entry’. Kies als WAN-poort de externe poort, als doel het IP van je Home Assistant en de interne poort.\n\nForward géén andere poorten (Headplane 3000, Home Assistant 8123).",
+  q_443: "Is poort 443 (TCP) op je router al in gebruik voor iets anders?",
+  a_free: "Nee, vrij", a_busy: "Ja, al in gebruik", a_unknown: "Weet ik niet",
+  unknown_help: "Zo controleer je dat: kijk in de lijst met port forwards van je router of 443 er al staat. Of open via 4G (wifi uit) https://{host}. Krijg je meteen een foutmelding of time-out, dan is 443 waarschijnlijk vrij.",
+  fwd_table: "Stel deze port forwards in:", fwd_ext: "Extern", fwd_to: "Naar", fwd_proto: "Protocol", fwd_req: "Nodig",
+  fwd_required: "ja", fwd_optional: "optioneel",
+  fwd_done: "Ik heb de port forwards ingesteld", fwd_undo: "Toch nog niet ingesteld",
+  local_busy: "Poort {ports} is op deze Home Assistant al in gebruik door een andere app (bijvoorbeeld NGINX Proxy Manager, AdGuard Home of Traefik). Daardoor kan Headscale niet starten.",
+  alt_title: "Oplossingen",
+  alt_internal: "Headscale intern op poort 8443 laten luisteren",
+  alt_internal_desc: "Je router stuurt extern 443 door naar intern 8443. Voor de buitenwereld (en Let's Encrypt) blijft het poort 443. Aanbevolen als iets op je HA-host 443 gebruikt.",
+  alt_free: "De andere app van poort 443 afhalen",
+  alt_free_desc: "Gebruik je die app nog? Zet hem op een andere poort of stop hem. Dan start Headscale vanzelf binnen een halve minuut.",
+  alt_move: "De bestaande forward van poort 443 verplaatsen",
+  alt_move_desc: "Staat 443 nu door naar iets dat je straks via het VPN bereikt (bijv. Home Assistant zelf)? Dan heb je die forward na deze installatie niet meer nodig. Geef 443 aan Headscale.",
+  alt_extport: "Een andere externe poort met een certificaat van Home Assistant",
+  alt_extport_desc: "Let's Encrypt kan zijn controle alleen via poort 443 doen. Op een andere poort gebruik je daarom een certificaat dat Home Assistant al heeft (bijv. van de Duck DNS-app met Let's Encrypt). Dat certificaat moet de servernaam dekken.",
+  alt_extport_use: "Gebruik https://{name}:8443 met {file}",
+  alt_extport_none: "Er staat geen bruikbaar certificaat in /ssl. Installeer de Duck DNS-app, zet Let's Encrypt aan (accept_terms) en kom hier terug.",
+  alt_proxy: "Achter je bestaande reverse proxy (gevorderd)",
+  alt_proxy_desc: "Je proxy (bijv. NGINX) op 443 stuurt hs.… door naar Headscale op poort 8080. De proxy moet WebSockets doorlaten en mag niet bufferen. De Headscale-makers ondersteunen dit niet officieel.",
+  apply: "Toepassen",
+
+  // 3 tls
+  s_tls: "Beveiligde verbinding (TLS)",
+  s_tls_sum: "Een geldig certificaat, zodat apparaten Headscale vertrouwen.",
+  i_tls: "Tailscale-apps praten alleen via HTTPS met een geldig certificaat.\n\nLet's Encrypt (aanbevolen): Headscale vraagt zelf een gratis certificaat aan en vernieuwt het automatisch. Let's Encrypt controleert dat via poort 443 van buitenaf, dus stap 1 en 2 moeten kloppen. De eerste aanvraag kan tot een minuut duren.\n\nCertificaat van Home Assistant: gebruik een certificaat uit /ssl, bijvoorbeeld van de Duck DNS-app. Nodig als je een andere externe poort dan 443 gebruikt.\n\nGeen: alleen als een eigen reverse proxy de HTTPS verzorgt.",
+  f_tls_mode: "Certificaat", m_letsencrypt: "Let's Encrypt (automatisch)", m_ha_certificate: "Certificaat uit Home Assistant (/ssl)", m_none: "Geen, mijn eigen proxy doet HTTPS",
+  f_acme_email: "E-mail voor Let's Encrypt (optioneel)", f_certfile: "Certificaat", f_keyfile: "Sleutel",
+  tls_ok: "Geldig certificaat van {issuer}, geldig tot {date}.",
+  tls_ok_hint: "Bevestigd via dezelfde controle die je apparaten doen.",
+  tls_timeout: "Geen certificaat binnen de tijd. Let's Encrypt kan je server waarschijnlijk niet bereiken.",
+  tls_untrusted: "Er is wel een certificaat, maar het wordt niet vertrouwd ({detail}).",
+  tls_connect: "Headscale is niet bereikbaar op poort {port}.",
+  tls_no_cert: "Headscale heeft nog geen certificaat: Let's Encrypt kon je server niet bereiken, of je zit in de rate limit van 1 uur.",
+  tls_tls: "De TLS-verbinding mislukte ({detail}).",
+  tls_causes: "Meest voorkomende oorzaken:",
+  tls_c1: "Port forward van extern 443 naar {lan}:{port} ontbreekt of wijst naar de verkeerde computer (stap 2).",
+  tls_c2: "Het serveradres wijst niet naar je huis (stap 1).",
+  tls_c3: "Je provider blokkeert poort 443 of gebruikt CGNAT. Test met je telefoon via 4G (stap 4).",
+  tls_c4: "Veel mislukte pogingen achter elkaar: Let's Encrypt blokkeert dan tijdelijk (rate limit). Wacht een uur.",
+  headscale_down: "Headscale draait nog niet. Bekijk het logboek van de app.",
+  proxy_confirm: "Mijn reverse proxy stuurt HTTPS door naar Headscale op poort {port}",
+  waiting_forwards: "Nog niet getest. Stel eerst de port forwards in (stap 2). Elke mislukte test kost een poging bij Let's Encrypt; na 5 mislukte pogingen per uur blokkeert Let's Encrypt je adres een uur.",
+  tls_test: "Certificaat nu testen", tls_test_hint: "Test pas als de port forward van 443 staat.",
+
+  // 4 external
+  s_external: "Bereikbaar vanaf internet",
+  s_external_sum: "Testen of Headscale echt van buitenaf werkt.",
+  i_external: "Vanuit je eigen netwerk lijkt alles vaak te werken terwijl het van buiten niet lukt. Daarom testen we van buitenaf. Als Let's Encrypt je certificaat heeft uitgegeven, is dat al bewezen: Let's Encrypt heeft je server toen zelf via internet bereikt.\n\nZelf testen: zet wifi uit op je telefoon, scan de QR-code en open de link. Zie je {\"status\":\"pass\"}, dan werkt het.\n\nDe STUN-poort (UDP) kan niet automatisch getest worden. Staat hij niet open, dan werkt alles nog via de relay.",
+  ext_proven: "Bewezen: Let's Encrypt heeft je server via internet bereikt.",
+  ext_scan: "Test met je telefoon via 4G (wifi uit):",
+  ext_works: "Werkt, ik zie status pass", ext_fails: "Werkt niet",
+  ext_fail_help: "Wat je kunt proberen:",
+  ext_f1: "Controleer de port forward (stap 2): extern {ext}/TCP naar {lan}:{port}.",
+  ext_f2: "Sommige routers maken bij een port forward geen firewallregel aan. Kijk of er een ‘allow’-regel voor dezelfde poort nodig is.",
+  ext_f3: "Krijg je ‘time-out’ en klopt alles? Dan blokkeert je provider binnenkomende verbindingen (CGNAT). Vraag om een eigen publiek IPv4-adres.",
+  ext_f4: "Zie je een andere website of de Home Assistant-inlog? Dan gaat 443 nog naar iets anders. Kies in stap 2 ‘Ja, al in gebruik’.",
+
+  // 5 tailscale
+  s_tailscale: "Tailscale op deze Home Assistant",
+  s_tailscale_sum: "Maakt je thuisnetwerk bereikbaar vanuit het VPN (subnet-router).",
+  i_tailscale: "Deze app bevat zelf een Tailscale-client. Die meldt zich automatisch aan bij Headscale als subnet-router voor je thuisnetwerk ({lan}). Daardoor bereik je onderweg Home Assistant, Immich, printers en alles op je LAN, zonder iets op die apparaten te installeren.\n\nExit-node: optioneel. Je telefoon kan dan al zijn internetverkeer via thuis sturen, handig op openbare wifi.\n\nGebruik je ook de losse Tailscale-app in Home Assistant? Stop die dan, anders zitten ze elkaar in de weg.",
+  ts_enable: "Tailscale op Home Assistant inschakelen", ts_disable: "Uitschakelen",
+  ts_exit_on: "Exit-node aanzetten", ts_exit_off: "Exit-node uitzetten",
+  ts_state: "Status: {state}", ts_routes: "Thuisnetwerk: {routes}", ts_approved: "goedgekeurd",
+  ts_other: "De app ‘{name}’ draait ook. Stop hem via Instellingen → Apps → {name} → Stoppen en zet ‘Starten bij opstarten’ uit. Deze app neemt zijn taak over.",
+  ts_not_ready: "De subnet-router is nog niet klaar. Dit duurt na een herstart meestal minder dan een minuut.",
+  ts_disabled: "Uitgeschakeld. Zonder subnet-router bereik je alleen apparaten waarop zelf Tailscale draait.",
+
+  // 6 device
+  s_device: "Je eerste apparaat",
+  s_device_sum: "Installeer Tailscale op je telefoon of laptop en log in.",
+  i_device: "Installeer de officiële Tailscale-app. Stel daarin dit serveradres in in plaats van tailscale.com:\n{url}\n\nLaptop/desktop: maak hieronder een sleutel en voer het commando uit.\niPhone: Instellingen-app → Tailscale → ‘Alternate Coordination Server URL’, daarna de Tailscale-app openen en inloggen.\nAndroid: tik in het menu van de app een paar keer op het versienummer en kies ‘Change server’.\n\nTelefoons openen na het inloggen een pagina met een registratie-opdracht. Plak die pagina of opdracht hieronder; dan keur je het apparaat goed.",
+  dl_title: "Tailscale downloaden:",
+  dev_count: "{n} apparaat/apparaten aangemeld, {online} online.",
+  dev_key: "Sleutel voor laptop/desktop maken",
+  open_devices: "Naar Apparaten",
+
+  // 7-9 optional
+  s_headplane: "Headplane (beheer)",
+  s_headplane_sum: "Uitgebreid beheer van gebruikers, toegangsregels en DNS.",
+  i_headplane: "Headplane is een beheerwebsite voor Headscale. Je opent hem in je eigen netwerk (of via het VPN) en logt in met een API-sleutel die 90 dagen geldig is. Voor dagelijks gebruik heb je hem niet nodig; dit paneel doet het meeste ook.",
+  s_printers: "Printers",
+  s_printers_sum: "Thuis printen vanaf elke plek.",
+  i_printers: "Printers vinden elkaar normaal via het lokale netwerk (mDNS). Dat werkt niet via een VPN. Deze app zoekt ze thuis op, geeft elke printer een vaste naam in het VPN en laat per apparaat zien hoe je hem toevoegt.",
+  open_printers: "Printers zoeken",
+  s_close8123: "Poort 8123 dichtzetten",
+  s_close8123_sum: "Home Assistant niet meer direct aan internet hangen.",
+  i_close8123: "Nu je Home Assistant via het VPN bereikt, hoeft poort 8123 niet meer open te staan op je router. Dat scheelt een aanvalsroute. Gebruik in de Home Assistant-app op je telefoon als extern adres het interne adres (bijv. http://192.168.1.10:8123); dat werkt zodra Tailscale aan staat. Doe dit pas als je eerste apparaat werkt.",
+  close_done: "Ik heb 8123 dichtgezet",
+});
+
+Object.assign(STRINGS.en, {
+  wiz_title: "Setup wizard",
+  wiz_intro: "Work through the steps. Each step is tested automatically and gets a green check mark when it is done. Click ⓘ for an explanation.",
+  wiz_progress: "Configured", wiz_open: "Open the setup wizard", wiz_next: "Next step", wiz_done_all: "Everything is set up.",
+  wiz_retest: "Test again", wiz_save: "Save and restart", wiz_skip: "Skip", wiz_unskip: "Do it anyway",
+  wiz_optional: "optional", wiz_restarting: "The app is restarting with the new settings… This usually takes 10–30 seconds.",
+  wiz_saved_norestart: "Saved (no restart needed).", wiz_no_supervisor: "Development mode: saved to options.json.",
+  st_ok: "Done", st_todo: "To do", st_warn: "Attention", st_fail: "Problem", st_skipped: "Skipped",
+  setup_unconfigured: "Headscale starts once step 1 is filled in.",
+  setup_invalid: "The settings are not valid yet; Headscale is waiting:",
+  setup_port_in_use: "Headscale is waiting: port {ports} is already in use on this Home Assistant. See step 2.",
+  s_address: "Server address", s_address_sum: "The address your devices use to find Headscale.",
+  i_address: "Your devices connect to Headscale through a fixed internet address. With Duck DNS every sub-domain works automatically: if Home Assistant is at vll6.duckdns.org, hs.vll6.duckdns.org points to your home too, so Home Assistant and Headscale each keep their own name. Avoid changing it later: all devices would have to sign in again.\n\nTailnet domain: the suffix of your devices inside the VPN (laptop.tailnet.home). It must not end with your Duck DNS domain.\n\nAdmin: your Headscale user name. Your devices belong to it and get full access.",
+  f_server_url: "Server address", f_admin_user: "Admin (user name)", f_base_domain: "Tailnet domain", use_suggestion: "Use {x}",
+  dns_ok: "{host} points to {ip}, which is your public IP address.",
+  dns_mismatch: "{host} points to {resolved}, but your public IP address is {ip}. Is your Duck DNS app still running? It normally updates the address every few minutes.",
+  dns_missing: "{host} does not exist in DNS (yet). Check the spelling. With Duck DNS, any sub-domain of your own name works.",
+  dns_error: "Checking DNS failed ({err}). Does Home Assistant have internet access?",
+  cgnat: "Your public IP address ({ip}) is in a CGNAT range: your ISP shares it and incoming connections are impossible. Ask your ISP for a public IPv4 address.",
+  s_ports: "Port forwarding", s_ports_sum: "Your router lets traffic from the internet reach Headscale.",
+  i_ports: "Your router must forward two kinds of traffic to the computer running Home Assistant:\n• TCP {ext} → {lan}:{port}: Headscale, the DERP relay and the Let's Encrypt certificate.\n• UDP {stun} → {lan}:{stun}: STUN, so devices can find a direct path. Without it everything still works, through the relay (slower).\n• Optional UDP 41641 → {lan}:41641: direct connections to the subnet router.\n\nUniFi: Settings → Routing (or Firewall & Security) → Port Forwarding → Create Entry.\n\nDon't forward other ports (Headplane 3000, Home Assistant 8123).",
+  q_443: "Is TCP port 443 on your router already used for something else?", a_free: "No, it's free", a_busy: "Yes, it's in use", a_unknown: "I don't know",
+  unknown_help: "How to check: look in your router's port forward list for 443, or open https://{host} on mobile data (Wi-Fi off). An immediate error or time-out usually means 443 is free.",
+  fwd_table: "Create these port forwards:", fwd_ext: "External", fwd_to: "To", fwd_proto: "Protocol", fwd_req: "Needed", fwd_required: "yes", fwd_optional: "optional",
+  fwd_done: "I've set up the port forwards", fwd_undo: "Not done yet after all",
+  local_busy: "Port {ports} is already used on this Home Assistant by another app (e.g. NGINX Proxy Manager, AdGuard Home or Traefik), so Headscale cannot start.",
+  alt_title: "Solutions",
+  alt_internal: "Let Headscale listen on internal port 8443",
+  alt_internal_desc: "Your router forwards external 443 to internal 8443. For the outside world (and Let's Encrypt) it stays port 443. Recommended when something on the HA host uses 443.",
+  alt_free: "Move the other app off port 443", alt_free_desc: "Still using that app? Give it another port or stop it; Headscale starts by itself within half a minute.",
+  alt_move: "Move the existing port 443 forward", alt_move_desc: "Does 443 currently go to something you'll reach through the VPN from now on (e.g. Home Assistant)? Then you no longer need that forward. Give 443 to Headscale.",
+  alt_extport: "Another external port with a certificate from Home Assistant",
+  alt_extport_desc: "Let's Encrypt can only validate through port 443, so on another port use a certificate Home Assistant already has (e.g. from the Duck DNS app with Let's Encrypt). It must cover the server name.",
+  alt_extport_use: "Use https://{name}:8443 with {file}",
+  alt_extport_none: "No usable certificate in /ssl. Install the Duck DNS app, enable Let's Encrypt (accept_terms) and come back.",
+  alt_proxy: "Behind your existing reverse proxy (advanced)",
+  alt_proxy_desc: "Your proxy (e.g. NGINX) on 443 forwards hs.… to Headscale on port 8080. It must pass WebSockets and must not buffer. Not officially supported by the Headscale maintainers.",
+  apply: "Apply",
+  s_tls: "Secure connection (TLS)", s_tls_sum: "A valid certificate so devices trust Headscale.",
+  i_tls: "Tailscale apps only talk HTTPS with a valid certificate.\n\nLet's Encrypt (recommended): Headscale requests and renews a free certificate itself. Let's Encrypt validates through port 443 from the internet, so steps 1 and 2 must be right. The first request can take up to a minute.\n\nHome Assistant certificate: a certificate from /ssl, e.g. from the Duck DNS app. Needed when you use an external port other than 443.\n\nNone: only when your own reverse proxy handles HTTPS.",
+  f_tls_mode: "Certificate", m_letsencrypt: "Let's Encrypt (automatic)", m_ha_certificate: "Certificate from Home Assistant (/ssl)", m_none: "None, my own proxy does HTTPS",
+  f_acme_email: "E-mail for Let's Encrypt (optional)", f_certfile: "Certificate", f_keyfile: "Key",
+  tls_ok: "Valid certificate from {issuer}, valid until {date}.", tls_ok_hint: "Confirmed with the same check your devices perform.",
+  tls_timeout: "No certificate in time. Let's Encrypt probably cannot reach your server.",
+  tls_untrusted: "There is a certificate, but it is not trusted ({detail}).", tls_connect: "Headscale is not reachable on port {port}.",
+  tls_no_cert: "Headscale has no certificate yet: Let's Encrypt could not reach your server, or you hit the 1-hour rate limit.",
+  tls_tls: "The TLS connection failed ({detail}).", tls_causes: "Most common causes:",
+  tls_c1: "The forward from external 443 to {lan}:{port} is missing or points to the wrong computer (step 2).",
+  tls_c2: "The server address does not point to your home (step 1).",
+  tls_c3: "Your ISP blocks port 443 or uses CGNAT. Test with your phone on mobile data (step 4).",
+  tls_c4: "Many failed attempts in a row: Let's Encrypt then blocks temporarily (rate limit). Wait an hour.",
+  headscale_down: "Headscale is not running yet. Check the app log.",
+  proxy_confirm: "My reverse proxy forwards HTTPS to Headscale on port {port}",
+  waiting_forwards: "Not tested yet. Set up the port forwards first (step 2). Every failed test uses an attempt at Let's Encrypt; after 5 failures per hour Let's Encrypt blocks your address for an hour.",
+  tls_test: "Test certificate now", tls_test_hint: "Only test once the port 443 forward is in place.",
+  s_external: "Reachable from the internet", s_external_sum: "Test that Headscale really works from outside.",
+  i_external: "From inside your own network things often seem to work while they fail from outside, so we test from outside. If Let's Encrypt issued your certificate, it's already proven: Let's Encrypt reached your server itself.\n\nTest yourself: turn off Wi-Fi on your phone, scan the QR code and open the link. If you see {\"status\":\"pass\"}, it works.\n\nThe STUN port (UDP) can't be tested automatically. If it is closed, everything still works through the relay.",
+  ext_proven: "Proven: Let's Encrypt reached your server over the internet.", ext_scan: "Test with your phone on mobile data (Wi-Fi off):",
+  ext_works: "Works, I see status pass", ext_fails: "Doesn't work", ext_fail_help: "Things to try:",
+  ext_f1: "Check the port forward (step 2): external {ext}/TCP to {lan}:{port}.",
+  ext_f2: "Some routers don't create a firewall rule with a port forward. Check whether an ‘allow’ rule for the same port is needed.",
+  ext_f3: "Time-out while everything looks right? Your ISP blocks incoming connections (CGNAT). Ask for a public IPv4 address.",
+  ext_f4: "Do you see another website or the Home Assistant login? Then 443 still goes elsewhere. Choose ‘Yes, it's in use’ in step 2.",
+  s_tailscale: "Tailscale on this Home Assistant", s_tailscale_sum: "Makes your home network reachable from the VPN (subnet router).",
+  i_tailscale: "This app contains its own Tailscale client. It registers with Headscale automatically as a subnet router for your home network ({lan}), so on the road you reach Home Assistant, Immich, printers and everything on your LAN without installing anything on those devices.\n\nExit node: optional. Your phone can send all its internet traffic through home, handy on public Wi-Fi.\n\nAlso running the separate Tailscale app in Home Assistant? Stop it; they get in each other's way.",
+  ts_enable: "Enable Tailscale on Home Assistant", ts_disable: "Disable", ts_exit_on: "Enable exit node", ts_exit_off: "Disable exit node",
+  ts_state: "State: {state}", ts_routes: "Home network: {routes}", ts_approved: "approved",
+  ts_other: "The app ‘{name}’ is running too. Stop it via Settings → Apps → {name} → Stop and turn off ‘Start on boot’. This app takes over its job.",
+  ts_not_ready: "The subnet router isn't ready yet. After a restart this usually takes less than a minute.",
+  ts_disabled: "Disabled. Without the subnet router you only reach devices that run Tailscale themselves.",
+  s_device: "Your first device", s_device_sum: "Install Tailscale on your phone or laptop and sign in.",
+  i_device: "Install the official Tailscale app and set this server address instead of tailscale.com:\n{url}\n\nLaptop/desktop: create a key below and run the command.\niPhone: Settings app → Tailscale → ‘Alternate Coordination Server URL’, then open the Tailscale app and sign in.\nAndroid: tap the version number in the app menu a few times and choose ‘Change server’.\n\nPhones open a page with a registration command after signing in. Paste that page or command below to approve the device.",
+  dl_title: "Download Tailscale:", dev_count: "{n} device(s) registered, {online} online.", dev_key: "Create a key for laptop/desktop", open_devices: "Go to Devices",
+  s_headplane: "Headplane (admin)", s_headplane_sum: "Advanced management of users, access rules and DNS.",
+  i_headplane: "Headplane is an admin website for Headscale. Open it on your own network (or through the VPN) and sign in with an API key valid for 90 days. You don't need it day to day; this panel covers most tasks.",
+  s_printers: "Printers", s_printers_sum: "Print at home from anywhere.",
+  i_printers: "Printers are normally discovered on the local network (mDNS), which doesn't work through a VPN. This app finds them at home, gives each printer a fixed name in the VPN and shows how to add it on each device.",
+  open_printers: "Find printers",
+  s_close8123: "Close port 8123", s_close8123_sum: "Stop exposing Home Assistant directly to the internet.",
+  i_close8123: "Now that you reach Home Assistant through the VPN, port 8123 no longer needs to be open on your router. That removes an attack path. In the Home Assistant phone app use the internal address (e.g. http://192.168.1.10:8123) as external URL; it works whenever Tailscale is on. Do this only after your first device works.",
+  close_done: "I've closed 8123",
+});
+
+const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };
+const DOWNLOADS = [
+  ["Windows", "https://tailscale.com/download/windows"],
+  ["macOS", "https://tailscale.com/download/mac"],
+  ["iPhone / iPad", "https://apps.apple.com/app/tailscale/id1470499037"],
+  ["Android", "https://play.google.com/store/apps/details?id=com.tailscale.ipn"],
+  ["Linux", "https://tailscale.com/download/linux"],
+];
+
+const fmt = (key, vars = {}) => t(key).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? `{${k}}`));
+let wizardData = null;
+const openSteps = new Set();
+
+function multiline(text) {
+  return text.split("\n").map((line) => (line ? el("p", {}, line) : null)).filter(Boolean);
+}
+
+function note(kind, ...children) {
+  return el("div", { class: `note ${kind}` }, ...children);
+}
+
+function qr(text) {
+  return el("img", { class: "qr", alt: text, src: `api/qr?text=${encodeURIComponent(text)}` });
+}
+
+function field(label, input) {
+  return el("label", {}, el("span", {}, label), input);
+}
+
+function suggestedHost() {
+  // The panel is served by Home Assistant itself: its address tells us the user's DuckDNS name.
+  let host = "";
+  try { host = window.top.location.hostname; } catch { host = location.hostname; }
+  if (!host || /^(\d+\.){3}\d+$/.test(host) || host === "localhost" || host.endsWith(".local")) return null;
+  return host.startsWith("hs.") ? host : `hs.${host}`;
+}
+
+async function saveOptions(changes, btn) {
+  busy(btn, true);
+  try {
+    const r = await api("wizard/options", { method: "POST", body: { changes } });
+    if (r.restarting) {
+      waitForRestart();
+    } else {
+      banner(r.changed ? t("wiz_no_supervisor") : t("wiz_saved_norestart"), "ok");
+      await loadWizard(true);
+    }
+  } catch (err) {
+    banner(err.message);
+  } finally {
+    busy(btn, false);
+  }
+}
+
+function waitForRestart() {
+  $("#overlay-text").textContent = t("wiz_restarting");
+  $("#overlay").hidden = false;
+  const started = Date.now();
+  let sawDown = false;
+  const tick = async () => {
+    try {
+      const res = await fetch("api/status", { cache: "no-store" });
+      if (res.ok && (sawDown || Date.now() - started > 20000)) {
+        location.reload();
+        return;
+      }
+      if (!res.ok) sawDown = true;
+    } catch {
+      sawDown = true;
+    }
+    if (Date.now() - started > 180000) { $("#overlay").hidden = true; return; }
+    setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 3000);
+}
+
+async function answer(key, value) {
+  try { wizardData = await api("wizard/answer", { method: "POST", body: { key, value } }); renderWizard(); }
+  catch (err) { banner(err.message); }
+}
+
+async function skip(step, skipped) {
+  try { wizardData = await api("wizard/skip", { method: "POST", body: { step, skipped } }); renderWizard(); }
+  catch (err) { banner(err.message); }
+}
+
+// ---------------------------------------------------------------- step bodies
+const BODIES = {
+  address(s) {
+    const d = s.data;
+    const url = el("input", { name: "server_url", value: d.server_url, placeholder: "https://hs.jouwnaam.duckdns.org", class: "wide" });
+    const sug = suggestedHost();
+    const parts = [];
+    if (sug && !d.configured) {
+      parts.push(el("button", { class: "btn secondary small", type: "button", onclick: () => { url.value = `https://${sug}`; } }, fmt("use_suggestion", { x: sug })));
+    }
+    const admin = el("input", { name: "admin_user", value: d.admin_user });
+    const base = el("input", { name: "base_domain", value: d.base_domain });
+    const save = el("button", { class: "btn", type: "button" }, t("wiz_save"));
+    save.addEventListener("click", () => saveOptions({ server_url: url.value, admin_user: admin.value, base_domain: base.value }, save));
+    const out = [el("div", { class: "row wrap" }, field(t("f_server_url"), url), ...parts),
+      el("div", { class: "row wrap" }, field(t("f_admin_user"), admin), field(t("f_base_domain"), base), save)];
+    const host = (d.server_url || "").replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+    const dns = d.dns || {};
+    if (d.invalid_message) out.push(note("fail", d.invalid_message));
+    if (s.issues.includes("dns_error")) out.push(note("warn", fmt("dns_error", { err: dns.error })));
+    if (s.issues.includes("dns_missing")) out.push(note("fail", fmt("dns_missing", { host })));
+    if (s.issues.includes("dns_mismatch")) out.push(note("warn", fmt("dns_mismatch", { host, resolved: (dns.resolved || []).join(", "), ip: dns.public_ip || "?" })));
+    if (s.status === "ok") out.push(note("ok", fmt("dns_ok", { host, ip: dns.public_ip })));
+    if (dns.cgnat_suspect) out.push(note("fail", fmt("cgnat", { ip: dns.public_ip })));
+    return out;
+  },
+
+  ports(s) {
+    const d = s.data;
+    const lan = d.lan_ip || "<HA-IP>";
+    const out = [];
+    if (d.local_busy.length) {
+      out.push(note("fail", fmt("local_busy", { ports: d.local_busy.join(", ") })));
+      out.push(alternatives([
+        ["alt_internal", "alt_internal_desc", { listen_port: 8443 }],
+        ["alt_free", "alt_free_desc", null],
+      ]));
+    }
+    const q = el("div", { class: "question" }, el("p", {}, t("q_443")),
+      el("div", { class: "choices" }, ...[["free", "a_free"], ["busy", "a_busy"], ["unknown", "a_unknown"]].map(([v, k]) =>
+        el("button", { class: `btn small ${d.router443 === v ? "" : "secondary"}`, type: "button", onclick: () => answer("router443", v) }, t(k)))));
+    out.push(q);
+    if (d.router443 === "unknown") out.push(note("info", fmt("unknown_help", { host: (wizardData.steps[0].data.server_url || "").replace(/^https?:\/\//, "") })));
+    if (d.router443 === "busy") {
+      const certs = d.certificates || [];
+      const certButtons = certs.flatMap((c) => c.names.filter((n) => !n.startsWith("*.")).map((n) => {
+        const b = el("button", { class: "btn small", type: "button" }, fmt("alt_extport_use", { name: n, file: c.file }));
+        b.addEventListener("click", () => saveOptions({ server_url: `https://${n}:8443`, listen_port: 8443, tls_mode: "ha_certificate", certfile: c.file, keyfile: c.keyfile || "privkey.pem" }, b));
+        return b;
+      }));
+      out.push(alternatives([
+        ["alt_move", "alt_move_desc", null],
+        ["alt_extport", "alt_extport_desc", null, certButtons.length ? certButtons : [note("warn", t("alt_extport_none"))]],
+        ["alt_proxy", "alt_proxy_desc", { tls_mode: "none", listen_port: 8080 }],
+      ]));
+    }
+    const rows = [
+      [`${d.external_port}`, `${lan}:${d.listen_port}`, "TCP", t("fwd_required")],
+      d.derp_enabled ? [`${d.stun_port}`, `${lan}:${d.stun_port}`, "UDP", t("fwd_required")] : null,
+      ["41641", `${lan}:41641`, "UDP", t("fwd_optional")],
+    ].filter(Boolean);
+    out.push(el("p", { class: "label" }, t("fwd_table")),
+      el("div", { class: "table-wrap" }, el("table", { class: "compact" },
+        el("thead", {}, el("tr", {}, ...["fwd_ext", "fwd_to", "fwd_proto", "fwd_req"].map((k) => el("th", {}, t(k))))),
+        el("tbody", {}, ...rows.map((r) => el("tr", {}, ...r.map((c) => el("td", { class: "mono" }, c))))))));
+    out.push(el("div", { class: "actions" }, d.forwards_done
+      ? el("button", { class: "btn secondary small", type: "button", onclick: () => answer("forwards_done", false) }, t("fwd_undo"))
+      : el("button", { class: "btn", type: "button", onclick: () => answer("forwards_done", true) }, `✓ ${t("fwd_done")}`)));
+    return out;
+  },
+
+  tls(s) {
+    const d = s.data;
+    const ports = wizardData.steps.find((x) => x.id === "ports").data;
+    const mode = el("select", { name: "tls_mode" }, ...["letsencrypt", "ha_certificate", "none"].map((m) => {
+      const o = el("option", { value: m }, t(`m_${m}`));
+      if (m === d.tls_mode) o.selected = true;
+      return o;
+    }));
+    const email = el("input", { type: "email", value: d.acme_email || "", placeholder: "naam@voorbeeld.nl" });
+    const certFiles = (d.certificates || []).map((c) => c.file);
+    const certSel = el("select", {}, ...(certFiles.length ? certFiles : [d.certfile]).map((f) => { const o = el("option", { value: f }, f); if (f === d.certfile) o.selected = true; return o; }));
+    const keyIn = el("input", { value: d.keyfile });
+    const extra = el("div", { class: "row wrap" });
+    const refreshExtra = () => {
+      extra.replaceChildren(...(mode.value === "letsencrypt" ? [field(t("f_acme_email"), email)]
+        : mode.value === "ha_certificate" ? [field(t("f_certfile"), certSel), field(t("f_keyfile"), keyIn)] : []));
+    };
+    mode.addEventListener("change", refreshExtra);
+    refreshExtra();
+    const save = el("button", { class: "btn", type: "button" }, t("wiz_save"));
+    save.addEventListener("click", () => {
+      const ch = { tls_mode: mode.value };
+      if (mode.value === "letsencrypt") ch.acme_email = email.value;
+      if (mode.value === "ha_certificate") { ch.certfile = certSel.value; ch.keyfile = keyIn.value; }
+      saveOptions(ch, save);
+    });
+    const out = [el("div", { class: "row wrap" }, field(t("f_tls_mode"), mode), extra, save)];
+    const c = d.check;
+    if (d.tls_mode !== "none" && s.status !== "ok") {
+      const tb = el("button", { class: "btn secondary small", type: "button" }, t("tls_test"));
+      tb.addEventListener("click", async () => {
+        busy(tb, true);
+        try { wizardData = await api("wizard?refresh=1&tls=1"); renderWizard(); } catch (err) { banner(err.message); } finally { busy(tb, false); }
+      });
+      out.push(el("div", { class: "actions" }, tb, el("span", { class: "muted small" }, t("tls_test_hint"))));
+    }
+    if (s.issues.includes("waiting_forwards")) out.push(note("info", t("waiting_forwards")));
+    if (d.tls_mode === "none") {
+      out.push(el("label", { class: "check" }, el("input", { type: "checkbox", ...(s.status === "ok" ? { checked: "" } : {}), onchange: (e) => answer("proxy_ok", e.target.checked) }), " ", fmt("proxy_confirm", { port: ports.listen_port })));
+    } else if (c && c.ok) {
+      out.push(note("ok", fmt("tls_ok", { issuer: c.issuer, date: c.expires ? new Date(c.expires * 1000).toLocaleDateString(LANG) : "?" }), el("div", { class: "muted" }, t("tls_ok_hint"))));
+    } else if (s.issues.includes("headscale_down")) {
+      out.push(note("fail", t("headscale_down")));
+    } else if (c) {
+      out.push(note("fail", fmt(`tls_${c.error}`, { detail: c.detail, port: ports.listen_port }),
+        el("p", {}, t("tls_causes")),
+        el("ul", {}, ...["tls_c1", "tls_c2", "tls_c3", "tls_c4"].map((k) => el("li", {}, fmt(k, { lan: ports.lan_ip || "<HA-IP>", port: ports.listen_port }))))));
+    }
+    return out;
+  },
+
+  external(s) {
+    const d = s.data;
+    const ports = wizardData.steps.find((x) => x.id === "ports").data;
+    const out = [];
+    if (d.proven_by_letsencrypt) out.push(note("ok", t("ext_proven")));
+    if (d.health_url) {
+      out.push(el("div", { class: "qr-row" }, qr(d.health_url),
+        el("div", {}, el("p", {}, t("ext_scan")), copyable(d.health_url),
+          el("div", { class: "actions" },
+            el("button", { class: `btn small ${d.answer === true ? "" : "secondary"}`, type: "button", onclick: () => answer("external_ok", true) }, `✓ ${t("ext_works")}`),
+            el("button", { class: `btn small ${d.answer === false ? "danger-fill" : "secondary"}`, type: "button", onclick: () => answer("external_ok", false) }, t("ext_fails"))))));
+    }
+    if (d.answer === false) {
+      out.push(note("warn", el("p", {}, t("ext_fail_help")), el("ul", {}, ...["ext_f1", "ext_f2", "ext_f3", "ext_f4"].map((k) =>
+        el("li", {}, fmt(k, { ext: ports.external_port, lan: ports.lan_ip || "<HA-IP>", port: ports.listen_port }))))));
+    }
+    return out;
+  },
+
+  tailscale(s) {
+    const d = s.data;
+    const out = [];
+    if (!d.enabled) {
+      out.push(note("info", t("ts_disabled")));
+      const b = el("button", { class: "btn", type: "button" }, t("ts_enable"));
+      b.addEventListener("click", () => saveOptions({ subnet_router: true }, b));
+      out.push(el("div", { class: "actions" }, b));
+      return out;
+    }
+    const r = d.router || {};
+    const approved = new Set(r.approved || []);
+    out.push(el("p", {}, fmt("ts_state", { state: r.state || "?" })),
+      el("p", {}, fmt("ts_routes", { routes: (d.lan_routes || []).map((x) => `${x}${approved.has(x) ? ` (${t("ts_approved")})` : ""}`).join(", ") || "–" })));
+    for (const a of (d.other_apps || []).filter((x) => x.state === "started")) out.push(note("warn", fmt("ts_other", { name: a.name })));
+    if (s.issues.includes("router_not_ready")) out.push(note("info", t("ts_not_ready")));
+    const ex = el("button", { class: "btn secondary small", type: "button" }, d.exit_node ? t("ts_exit_off") : t("ts_exit_on"));
+    ex.addEventListener("click", () => saveOptions({ exit_node: !d.exit_node }, ex));
+    out.push(el("div", { class: "actions" }, ex));
+    return out;
+  },
+
+  device(s) {
+    const d = s.data;
+    const out = [el("p", { class: "label" }, t("dl_title")),
+      el("div", { class: "actions" }, ...DOWNLOADS.map(([n, u]) => el("a", { class: "btn secondary small", href: u, target: "_blank", rel: "noopener" }, n)))];
+    if (d.login_server) {
+      out.push(el("div", { class: "qr-row" }, qr(d.login_server), el("div", {}, el("p", { class: "label" }, t("f_server_url")), copyable(d.login_server))));
+    }
+    if (d.count) out.push(note("ok", fmt("dev_count", { n: d.count, online: d.online })));
+    out.push(el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => show("devices") }, t("open_devices"))));
+    return out;
+  },
+
+  headplane() {
+    const b = el("button", { class: "btn", type: "button", onclick: () => show("overview") }, t("open_headplane"));
+    return [el("div", { class: "actions" }, b)];
+  },
+
+  printers(s) {
+    return [s.data.count ? note("ok", `${s.data.count} ✓`) : null,
+      el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => show("printers") }, t("open_printers")))].filter(Boolean);
+  },
+
+  close8123(s) {
+    return [el("div", { class: "actions" }, s.status === "ok"
+      ? el("button", { class: "btn secondary small", type: "button", onclick: () => answer("close8123_done", false) }, t("fwd_undo"))
+      : el("button", { class: "btn", type: "button", onclick: () => answer("close8123_done", true) }, `✓ ${t("close_done")}`))];
+  },
+};
+
+function alternatives(items) {
+  return el("div", { class: "alternatives" }, el("p", { class: "label" }, t("alt_title")),
+    ...items.map(([title, desc, changes, extra]) => {
+      const box = el("div", { class: "alt" }, el("strong", {}, t(title)), el("p", { class: "muted" }, t(desc)));
+      if (changes) {
+        const b = el("button", { class: "btn small", type: "button" }, t("apply"));
+        b.addEventListener("click", () => saveOptions(changes, b));
+        box.append(el("div", { class: "actions" }, b));
+      }
+      if (extra) box.append(el("div", { class: "actions" }, ...extra));
+      return box;
+    }));
+}
+
+function infoText(step) {
+  const ports = wizardData.steps.find((x) => x.id === "ports").data;
+  const ts = wizardData.steps.find((x) => x.id === "tailscale").data;
+  const dev = wizardData.steps.find((x) => x.id === "device").data;
+  return fmt(`i_${step.id}`, {
+    ext: ports.external_port,
+    lan: step.id === "tailscale" ? (ts.lan_routes || []).join(", ") || "LAN" : ports.lan_ip || "<HA-IP>",
+    port: ports.listen_port,
+    stun: ports.stun_port,
+    url: dev.login_server || "https://hs.…",
+  });
+}
+
+// ---------------------------------------------------------------- render
+function renderWizard() {
+  const w = wizardData;
+  const root = $("#wizard");
+  if (!w) return;
+  const firstOpen = w.steps.find((s) => !["ok", "skipped"].includes(s.status) && !s.optional) || w.steps.find((s) => !["ok", "skipped"].includes(s.status));
+  if (!openSteps.size && firstOpen) openSteps.add(firstOpen.id);
+
+  const head = el("article", { class: "card" },
+    el("div", { class: "card-head" }, el("h2", {}, t("wiz_title")),
+      el("button", { class: "btn secondary small", type: "button", onclick: (e) => { busy(e.target, true); loadWizard(true).finally(() => busy(e.target, false)); } }, t("wiz_retest"))),
+    el("p", { class: "muted" }, t("wiz_intro")),
+    progressBar(w.progress));
+  const setup = w.setup_mode;
+  if (setup) {
+    const msg = setup.reason === "unconfigured" ? t("setup_unconfigured")
+      : setup.reason === "port_in_use" ? fmt("setup_port_in_use", { ports: (setup.ports || []).join(", ") })
+        : `${t("setup_invalid")} ${setup.message || ""}`;
+    head.append(note(setup.reason === "unconfigured" ? "info" : "fail", msg));
+  }
+
+  const list = el("ol", { class: "steps-list" }, ...w.steps.map((s, i) => {
+    const open = openSteps.has(s.id);
+    const icon = el("span", { class: `step-icon ${s.status}` }, STEP_ICON[s.status] || String(i + 1));
+    const infoBtn = el("button", { class: "info-btn", type: "button", "aria-label": "info", title: "Info" }, "i");
+    const info = el("div", { class: "info-panel", hidden: "" }, ...multiline(infoText(s)));
+    infoBtn.addEventListener("click", (e) => { e.stopPropagation(); info.hidden = !info.hidden; });
+    const header = el("div", { class: "step-head", role: "button", tabindex: "0" },
+      icon,
+      el("div", { class: "step-title" },
+        el("strong", {}, t(`s_${s.id}`), s.optional ? el("span", { class: "muted small" }, ` · ${t("wiz_optional")}`) : ""),
+        el("div", { class: "muted small" }, t(`s_${s.id}_sum`))),
+      el("span", { class: `pill ${s.status === "ok" ? "ok" : s.status === "fail" ? "bad" : ""}` }, t(`st_${s.status}`)),
+      infoBtn);
+    const toggle = () => { open ? openSteps.delete(s.id) : openSteps.add(s.id); renderWizard(); };
+    header.addEventListener("click", toggle);
+    header.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    const li = el("li", { class: `step ${s.status} ${open ? "open" : ""}` }, header, info);
+    if (open) {
+      const body = el("div", { class: "step-body" }, ...(BODIES[s.id](s) || []));
+      if (s.optional || ["external", "close8123"].includes(s.id)) {
+        body.append(el("div", { class: "actions end" }, s.status === "skipped"
+          ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, false) }, t("wiz_unskip"))
+          : s.status !== "ok" ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, true) }, t("wiz_skip")) : ""));
+      }
+      li.append(body);
+    }
+    return li;
+  }));
+  root.replaceChildren(head, el("article", { class: "card" }, list));
+}
+
+function progressBar(pct) {
+  return el("div", { class: "progress" },
+    el("div", { class: "progress-track" }, el("div", { class: `progress-fill ${pct === 100 ? "complete" : ""}`, style: `width:${pct}%` })),
+    el("span", { class: "progress-label" }, `${t("wiz_progress")}: ${pct}%`));
+}
+
+async function loadWizard(refresh = false) {
+  wizardDirty = false;
+  wizardData = await api(`wizard${refresh ? "?refresh=1" : ""}`);
+  renderWizard();
+  return wizardData;
+}
+
+async function renderProgressCard() {
+  const w = await api("wizard");
+  const card = $("#progress-card");
+  const next = w.steps.find((s) => !["ok", "skipped"].includes(s.status));
+  card.replaceChildren(
+    el("div", { class: "card-head" }, el("h2", {}, t("wiz_title")),
+      el("button", { class: "btn small", type: "button", onclick: () => { openSteps.clear(); show("setup"); } }, t("wiz_open"))),
+    progressBar(w.progress),
+    el("p", { class: "muted" }, next ? `${t("wiz_next")}: ${t(`s_${next.id}`)}` : t("wiz_done_all")));
+  card.hidden = false;
+}
+
+loaders.setup = () => { wizardDirty = false; return loadWizard(false); };
+// Unsaved edits in the wizard pause the automatic refresh.
+let wizardDirty = false;
+$("#wizard").addEventListener("input", () => { wizardDirty = true; });
+setInterval(() => {
+  if (current === "setup" && !document.hidden && $("#overlay").hidden && !wizardDirty) loadWizard(false).catch(() => {});
+}, 20000);
+boot();

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------- i18n
 const STRINGS = {
   nl: {
-    tab_overview: "Overzicht", tab_devices: "Apparaten", tab_printers: "Printers",
+    tab_overview: "Overzicht", tab_setup: "Installatie", tab_devices: "Apparaten", tab_printers: "Printers",
     server: "Server", router: "Subnet-router",
     headplane_intro: "Volledige beheer-UI: gebruikers, ACL-beleid, DNS en apparaten. Inloggen met een API-sleutel.",
     open_headplane: "Open Headplane", create_apikey: "API-sleutel maken",
@@ -41,7 +41,7 @@ const STRINGS = {
     howto_note: "Op het apparaat moet Tailscale actief zijn met MagicDNS aan (standaard).",
   },
   en: {
-    tab_overview: "Overview", tab_devices: "Devices", tab_printers: "Printers",
+    tab_overview: "Overview", tab_setup: "Setup", tab_devices: "Devices", tab_printers: "Printers",
     online: "online", offline: "offline", never: "never", expire: "Log out", delete: "Delete",
     no_devices: "No devices yet.", approve_routes: "Approve routes", none_yet: "No printers added yet.", scanning: "Scanning…",
     nothing_found: "No printers found. Try the port scan or add one manually.", added: "added",
@@ -164,6 +164,7 @@ async function loadStatus() {
   if (s.headplane.enabled && s.headplane.url) { link.href = s.headplane.url; link.hidden = false; }
   else link.hidden = true;
   $("#login-server").textContent = s.server_url;
+  if (typeof renderProgressCard === "function") renderProgressCard().catch(() => {});
   const msgs = [s.error, ...(s.warnings || [])].filter(Boolean);
   banner(msgs.join(" · "), s.error ? "error" : "warn");
   return s;
@@ -334,8 +335,16 @@ function show(tab) {
 document.querySelectorAll("[role=tab]").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
 document.querySelectorAll("[data-refresh]").forEach((b) => b.addEventListener("click", () => show(b.dataset.refresh)));
 
-applyI18n();
-let initial = "overview";
-try { initial = sessionStorage.getItem("hsha-tab") || "overview"; } catch { /* ignore */ }
-show(loaders[initial] ? initial : "overview");
-setInterval(() => { if (current === "overview" && !document.hidden) loadStatus().catch(() => {}); }, 15000);
+// Started by wizard.js once it has registered the setup tab.
+function boot() {
+  applyI18n();
+  let initial = null;
+  try { initial = sessionStorage.getItem("hsha-tab"); } catch { /* ignore */ }
+  if (initial && loaders[initial]) {
+    show(initial);
+  } else {
+    // First visit in this session: open the setup wizard until it is complete.
+    api("wizard").then((w) => show(w.progress < 100 ? "setup" : "overview")).catch(() => show("overview"));
+  }
+  setInterval(() => { if (current === "overview" && !document.hidden) loadStatus().catch(() => {}); }, 15000);
+}

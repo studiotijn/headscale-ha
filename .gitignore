@@ -10,3 +10,5 @@ venv/
 finegrained-token.txt
 *token*.txt
 *.tar.gz
+Headplane-API-key.txt
+*api-key*.txt

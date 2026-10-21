@@ -48,7 +48,8 @@ def test_internal_url():
 
 
 def test_letsencrypt_warning_on_other_port():
-    assert opts(listen_port=8443).warnings()
+    assert opts(server_url="https://hs.x.org:8443").warnings()
+    assert not opts(listen_port=8443).warnings()
     assert not opts(listen_port=443).warnings()
 
 
@@ -72,7 +73,9 @@ def test_headplane_config():
     cfg = headplane_config(opts(server_url="https://hs.x.org"), "a" * 32)
     assert cfg["headscale"]["url"] == "https://hs.x.org"
     assert cfg["server"]["cookie_secret"] == "a" * 32
-    assert not any(v["enabled"] for v in cfg["integration"].values())
+    # Headplane validates every integration block that is present (0.8.1 crashed on
+    # a disabled kubernetes block without pod_name), so none may be written.
+    assert "integration" not in cfg
 
 
 def test_initial_policy_is_json_after_comments():
@@ -115,3 +118,20 @@ def test_merge_prefers_mdns_and_ipp():
     assert len(merged) == 1
     assert merged[0]["protocol"] == "ipp"
     assert set(merged[0]["protocols"]) == {"ipp", "ipps", "raw"}
+
+
+def test_wizard_covers_and_coerce():
+    from hsha.wizard import Wizard
+
+    assert Wizard.covers(["vll6.duckdns.org"], "vll6.duckdns.org")
+    assert Wizard.covers(["*.vll6.duckdns.org"], "hs.vll6.duckdns.org")
+    assert not Wizard.covers(["*.vll6.duckdns.org"], "a.b.vll6.duckdns.org")
+    out = Wizard._coerce({"server_url": "HS.Vll6.duckdns.org/", "listen_port": "8443", "admin_user": "Tijn"})
+    assert out == {"server_url": "https://hs.vll6.duckdns.org", "listen_port": 8443, "admin_user": "tijn"}
+    with pytest.raises(ValueError):
+        Wizard._coerce({"log_level": "debug"})
+
+
+def test_options_configured_placeholder():
+    assert not opts().configured
+    assert opts(server_url="https://hs.vll6.duckdns.org").configured

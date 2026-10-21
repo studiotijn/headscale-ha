@@ -5,6 +5,6 @@
 # ==============================================================================
 mkdir -p /run/hsha /run/headscale /run/tailscale
 
-if ! python3 -m hsha.render; then
-    bashio::exit.nok "Invalid configuration, see the messages above."
-fi
+# Never fails on a bad configuration: Headscale then waits and the setup
+# wizard in the sidebar panel explains what to fix.
+python3 -m hsha.render || bashio::log.error "Rendering the configuration failed, see above."

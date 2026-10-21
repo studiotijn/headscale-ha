@@ -69,6 +69,18 @@ At home your devices resolve `hs.yourname.duckdns.org` to your public IP. If you
 support NAT loopback (hairpinning), add a local DNS override that points that name to the
 Home Assistant host.
 
+## Setup wizard
+
+Open the **Headscale** panel in the sidebar. As long as the setup is incomplete, the panel
+opens on **Setup**. Every step is tested automatically and gets a green check mark; the ⓘ
+button explains it. Settings you change there are saved as app options and the app restarts
+by itself. You can also edit the options on the app's Configuration tab; the wizard reads the
+same values.
+
+**Let's Encrypt quota:** each certificate attempt that fails counts toward a limit of 5 per
+hour per hostname, after which Let's Encrypt blocks it for an hour. Set up the port forwards
+first, then use *Test certificate now*.
+
 ## First steps
 
 1. Start the app and check the log for `Headscale ready`. Open the **Headscale** panel in

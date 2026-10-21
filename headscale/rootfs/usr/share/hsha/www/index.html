@@ -11,6 +11,7 @@
     <h1>Headscale</h1>
     <nav role="tablist">
       <button role="tab" data-tab="overview" aria-selected="true" data-i18n="tab_overview">Overview</button>
+      <button role="tab" data-tab="setup" data-i18n="tab_setup">Setup</button>
       <button role="tab" data-tab="devices" data-i18n="tab_devices">Devices</button>
       <button role="tab" data-tab="printers" data-i18n="tab_printers">Printers</button>
     </nav>
@@ -21,6 +22,7 @@
 
     <!-- Overview -->
     <section id="tab-overview" class="tab">
+      <article class="card progress-card" id="progress-card" hidden></article>
       <div class="grid">
         <article class="card">
           <h2 data-i18n="server">Server</h2>
@@ -40,6 +42,11 @@
           <div id="apikey-out" class="secret" hidden></div>
         </article>
       </div>
+    </section>
+
+    <!-- Setup wizard -->
+    <section id="tab-setup" class="tab" hidden>
+      <div id="wizard"></div>
     </section>
 
     <!-- Devices -->
@@ -143,6 +150,8 @@
     </div>
   </template>
 
+  <div id="overlay" class="overlay" hidden><div class="overlay-box"><div class="spinner"></div><p id="overlay-text"></p></div></div>
   <script src="static/app.js"></script>
+  <script src="static/wizard.js"></script>
 </body>
 </html>

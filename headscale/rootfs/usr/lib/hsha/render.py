@@ -115,12 +115,8 @@ def headplane_config(opts: Options, cookie_secret: str) -> dict:
             "config_strict": False,
             "dns_records_path": str(paths.HS_EXTRA_RECORDS),
         },
-        "integration": {
-            "agent": {"enabled": False},
-            "docker": {"enabled": False},
-            "kubernetes": {"enabled": False},
-            "proc": {"enabled": False},
-        },
+        # No `integration` block: every integration is off by default, and Headplane
+        # validates the fields of an integration as soon as its key is present.
     }
 
 
@@ -221,17 +217,32 @@ def _uid(user: str) -> int:
     return pwd.getpwnam(user).pw_uid
 
 
+def set_setup_mode(reason: str | None, message: str = "", **extra) -> None:
+    """Record why Headscale must not start yet; the wizard shows it and the app keeps running."""
+    runtime = read_json(paths.RUNTIME, {})
+    runtime["setup_mode"] = {"reason": reason, "message": message, **extra} if reason else None
+    write_json(paths.RUNTIME, runtime, 0o644)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="[hsha] %(message)s")
+    paths.RUN.mkdir(parents=True, exist_ok=True)
     opts = load()
+    if not opts.configured:
+        log.warning("Not configured yet: open the Headscale panel in the sidebar and follow the setup wizard.")
+        set_setup_mode("unconfigured")
+        return 0
     try:
         opts.validate()
     except OptionsError as exc:
         log.error("Invalid configuration: %s", exc)
-        return 1
+        log.error("Headscale is not started. Fix it in the setup wizard (Headscale panel in the sidebar).")
+        set_setup_mode("invalid", str(exc))
+        return 0
     for warning in opts.warnings():
         log.warning(warning)
     render(opts)
+    set_setup_mode(None)
     log.info("Configuration written (server_url=%s, tls_mode=%s)", opts.server_url_clean, opts.tls_mode)
     return 0
 

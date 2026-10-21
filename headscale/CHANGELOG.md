@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0
+
+- Setup wizard in the sidebar panel: nine steps with automatic checks, green check marks,
+  ⓘ explanations and a progress percentage on the overview.
+  - Checks that the server address resolves to your public IP (and warns about CGNAT).
+  - Port forwarding helper with a decision tree when port 443 is already in use: internal
+    port 8443, another external port with a certificate from `/ssl`, or an existing reverse proxy.
+  - Certificate test, an external test with a QR code for your phone, subnet router status
+    (and a warning when the separate Tailscale app also runs), first device, Headplane,
+    printers and closing port 8123.
+  - Settings are saved through the Supervisor and the app restarts by itself.
+- Setup mode: an empty or invalid configuration, or a port that is already in use, no longer
+  stops the app. Headscale waits and the wizard explains what to fix.
+- Fix: Headplane did not start (`integration.kubernetes.pod_name` missing).
+- Fix: protect the Let's Encrypt quota. The subnet router only signs in once a valid
+  certificate is served, and certificate checks are rare until the port forwards are confirmed.
+  Before, every retry triggered a new validation, so Let's Encrypt blocked the hostname for an hour.
+- Fix: finish scripts logged the service name as `.`.
+
 ## 0.1.0
 
 First prototype.
