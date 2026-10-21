@@ -187,6 +187,9 @@ def render(opts: Options) -> None:
         )
         # Headplane runs unprivileged: it may read the configs, edit DNS records
         # and write its own data, but cannot rewrite the generated server config.
+        # It must be able to traverse /data to reach its folders.
+        with contextlib.suppress(OSError):
+            os.chmod(paths.DATA, os.stat(paths.DATA).st_mode | 0o711)
         _chgrp(paths.HP_DIR, "headplane", 0o770)
         _chgrp(paths.HP_CONFIG, "headplane", 0o640)
         _chgrp(paths.HS_DIR, "headplane", 0o750)
