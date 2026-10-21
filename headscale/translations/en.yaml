@@ -5,12 +5,10 @@ configuration:
   tls_mode:
     name: TLS mode
     description: >-
-      letsencrypt = Headscale requests its own certificate (needs port 443 reachable from the internet);
-      ha_certificate = use a certificate from /ssl (e.g. from the Duck DNS or Let's Encrypt app);
-      none = plain HTTP, only when you put your own reverse proxy in front.
+      Certificate source. ha_certificate = a certificate from /ssl made by the Let's Encrypt or Duck DNS app (recommended); none = plain HTTP behind your own reverse proxy. The built-in letsencrypt mode has been removed.
   acme_email:
     name: Let's Encrypt e-mail
-    description: Optional e-mail address for certificate expiry notices.
+    description: Not used any more (the certificate comes from the Let's Encrypt or Duck DNS app).
   certfile:
     name: Certificate file
     description: File in /ssl, used with tls_mode ha_certificate.

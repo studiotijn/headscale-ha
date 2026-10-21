@@ -10,8 +10,7 @@ from .store import read_json
 
 DEFAULTS = {
     "server_url": "https://hs.example.duckdns.org",
-    "tls_mode": "letsencrypt",
-    "acme_email": "",
+    "tls_mode": "ha_certificate",
     "certfile": "fullchain.pem",
     "keyfile": "privkey.pem",
     "listen_port": 443,
@@ -80,11 +79,6 @@ class Options:
 
     def warnings(self) -> list[str]:
         out = []
-        if self.tls_mode == "letsencrypt" and self.external_port != 443:
-            out.append(
-                "tls_mode letsencrypt uses the TLS-ALPN-01 challenge, which Let's Encrypt always performs "
-                "on external port 443, but server_url uses another port. Use tls_mode ha_certificate instead."
-            )
         if not self.derp_enabled and self.tailscale_derp_fallback:
             out.append("Embedded DERP disabled: relayed traffic goes through Tailscale's public DERP servers.")
         return out
@@ -107,10 +101,17 @@ class Options:
                 "Both the embedded DERP server and the Tailscale DERP fallback are disabled; "
                 "clients behind NAT would not be able to connect. Enable at least one."
             )
+        if self.tls_mode == "letsencrypt":
+            raise OptionsError(
+                "The built-in Let's Encrypt mode has been removed. Let the Let's Encrypt or Duck DNS app "
+                "create the certificate and choose tls_mode ha_certificate (the setup wizard helps)."
+            )
         if self.tls_mode == "ha_certificate":
-            for name in (self.certfile, self.keyfile):
-                if not (paths.SSL / name).is_file():
-                    raise OptionsError(f"tls_mode ha_certificate: /ssl/{name} not found")
+            from .certs import check
+
+            problem = check(self.certfile, self.keyfile, host)
+            if problem:
+                raise OptionsError(problem)
         if self.headplane and self.headplane_port in (self.listen_port, 19090, 50443):
             raise OptionsError("headplane_port clashes with another port used by this app")
 

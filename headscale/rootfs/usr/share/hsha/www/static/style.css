@@ -238,3 +238,7 @@ table.compact th, table.compact td { padding: 6px 8px; }
   .spinner { animation: none; }
   .progress-fill { transition: none; }
 }
+ul.plain { list-style: none; padding: 0; margin: 4px 0; }
+ul.plain li { margin: 4px 0; }
+.porttest { border-top: 1px solid var(--border); padding-top: 12px; }
+.found li .actions { justify-content: flex-end; }

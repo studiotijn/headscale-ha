@@ -3,7 +3,7 @@
 # ==============================================================================
 # Headplane admin UI (runs unprivileged)
 # ==============================================================================
-if ! bashio::config.true 'headplane'; then
+if [[ "$(python3 -m hsha.opt headplane)" != "true" ]]; then
     bashio::log.info "Headplane disabled"
     exec sleep infinity
 fi
@@ -15,5 +15,5 @@ fi
 
 export HEADPLANE_CONFIG_PATH=/data/headplane/config.yaml
 cd /app || bashio::exit.nok "Headplane is missing from the image"
-bashio::log.info "Starting Headplane on port $(bashio::config 'headplane_port')"
+bashio::log.info "Starting Headplane on port $(python3 -m hsha.opt headplane_port)"
 exec s6-setuidgid headplane node /app/build/server/index.js

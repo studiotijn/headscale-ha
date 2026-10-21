@@ -192,6 +192,16 @@ class App:
         self.wizard.skip(str(body.get("step")), bool(body.get("skipped", True)))
         return web.json_response(await self.wizard.evaluate())
 
+    async def porttest_start(self, request: web.Request) -> web.Response:
+        body = await request.json() if request.can_read_body else {}
+        return web.json_response(self.wizard.start_port_test(str(body.get("mode", "auto"))))
+
+    async def external_test(self, _request: web.Request) -> web.Response:
+        return web.json_response(await self.wizard.external_test())
+
+    async def porttest_get(self, _request: web.Request) -> web.Response:
+        return web.json_response(self.wizard.port_test_view())
+
     async def wizard_options(self, request: web.Request) -> web.Response:
         body = await request.json()
         try:
@@ -325,6 +335,9 @@ class App:
         app.router.add_post("/api/wizard/answer", self.wizard_answer)
         app.router.add_post("/api/wizard/skip", self.wizard_skip)
         app.router.add_post("/api/wizard/options", self.wizard_options)
+        app.router.add_post("/api/wizard/porttest", self.porttest_start)
+        app.router.add_get("/api/wizard/porttest", self.porttest_get)
+        app.router.add_post("/api/wizard/external", self.external_test)
         app.router.add_get("/api/qr", self.qr)
         app.router.add_get("/api/update", self.update_get)
         app.router.add_post("/api/update", self.update_post)

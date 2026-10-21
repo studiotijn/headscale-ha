@@ -3,7 +3,7 @@
 A Home Assistant app (add-on) repository with a complete, self-hosted
 [Tailscale](https://tailscale.com) control plane based on [Headscale](https://headscale.net):
 
-- **Headscale** with native TLS: Let's Encrypt (TLS-ALPN-01) or a certificate from `/ssl`, with no reverse proxy
+- **Headscale** serving HTTPS itself with the certificate from the Let's Encrypt or Duck DNS app (`/ssl`), with no reverse proxy
 - **Embedded DERP relay + STUN**; Tailscale's relays as a cached fallback
 - **Subnet router / exit node** inside the app, registered and approved automatically
 - **[Headplane](https://github.com/tale/headplane)** admin UI on the LAN

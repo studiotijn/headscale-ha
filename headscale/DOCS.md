@@ -9,7 +9,7 @@ The app bundles:
 
 | Component | Purpose |
 | --- | --- |
-| **Headscale** | Control server. Native TLS (Let's Encrypt or your `/ssl` certificate), no reverse proxy needed. |
+| **Headscale** | Control server. Serves HTTPS itself with the certificate from `/ssl`, no reverse proxy needed. |
 | **Embedded DERP relay** | Relays traffic when two devices cannot connect directly. Tailscale's public relays are available as a fallback. |
 | **Subnet router** | A Tailscale node inside the app that makes your LAN reachable. Registered and approved automatically. |
 | **Headplane** | Full admin UI (users, ACL policy, DNS, machines) on your LAN. |
@@ -17,40 +17,38 @@ The app bundles:
 
 ## Before you start
 
-1. A hostname pointing to your home IP, e.g. `hs.yourname.duckdns.org`. With Duck DNS every
-   sub-domain of your Duck DNS name points to the same IP, so you don't need to change anything.
+1. **A certificate in `/ssl`**, made by the **Let's Encrypt** app or the **Duck DNS** app.
+   This app does not request certificates itself.
+   - Let's Encrypt app: use the DNS challenge (`dns: provider: dns-duckdns` with your Duck DNS
+     token). No port needs to be open. Add `hs.yourname.duckdns.org` to `domains` if you want a
+     separate name for Headscale. The app only runs briefly, so start it weekly with an
+     automation to renew.
+   - Duck DNS app: enable `lets_encrypt: accept_terms: true`. It keeps running and renews by itself.
+   When the certificate is renewed, this app restarts Headscale by itself.
 2. Home Assistant must run 24/7. If it is down, devices that are already connected keep their
    direct connections for a while, but nothing new can sign in.
 
 ## Configuration
 
-Minimal configuration:
+Run the **setup wizard** (Headscale panel → Setup). It fills in and tests everything below.
 
 ```yaml
-server_url: https://hs.yourname.duckdns.org
-tls_mode: letsencrypt
+server_url: https://hs.yourname.duckdns.org   # must be covered by the certificate
+tls_mode: ha_certificate
+certfile: fullchain.pem
+keyfile: privkey.pem
 base_domain: tailnet.home
 admin_user: yourname
 ```
 
-Important options:
-
 - **`server_url`**: the public address. Don't change it after devices have joined; they
   would all have to sign in again.
-- **`tls_mode`**:
-  - `letsencrypt` (recommended): Headscale requests and renews its own certificate through the
-    TLS-ALPN-01 challenge. Let's Encrypt connects to **port 443**, so external port 443 must reach
-    `listen_port`.
-  - `ha_certificate`: use `certfile`/`keyfile` from `/ssl`, for example from the Duck DNS app.
-    The certificate must cover the `server_url` hostname.
-  - `none`: plain HTTP for setups with your own reverse proxy. The proxy must pass WebSocket
-    upgrades and must not buffer. The Headscale maintainers don't support this setup, so use it
-    only if you know why you need it.
+- **`tls_mode`**: `ha_certificate` (recommended), or `none` behind your own reverse proxy.
+  With `none` the proxy must pass WebSocket upgrades and must not buffer.
 - **`base_domain`**: MagicDNS suffix for your devices (`laptop.tailnet.home`). It must not be the
   same as, or a parent or child of, the `server_url` domain.
 - **`advertise_routes`**: leave empty to advertise the Home Assistant host's LAN automatically.
-- **`exit_node`**: lets your phone send all internet traffic through home, which is handy on
-  public Wi-Fi.
+- **`exit_node`**: lets your phone send all internet traffic through home.
 
 ## Port forwarding
 
@@ -58,7 +56,7 @@ On your router, forward to the IP of the Home Assistant host:
 
 | External | Internal | Protocol | Required for |
 | --- | --- | --- | --- |
-| 443 | `listen_port` (443) | TCP | Headscale, DERP relay, Let's Encrypt |
+| 443 | `listen_port` (443) | TCP | Headscale and the DERP relay |
 | `stun_port` (3478) | `stun_port` | UDP | DERP/STUN (NAT traversal) |
 | 41641 | 41641 | UDP | optional: direct connections to the subnet router |
 
@@ -77,9 +75,9 @@ button explains it. Settings you change there are saved as app options and the a
 by itself. You can also edit the options on the app's Configuration tab; the wizard reads the
 same values.
 
-**Let's Encrypt quota:** each certificate attempt that fails counts toward a limit of 5 per
-hour per hostname, after which Let's Encrypt blocks it for an hour. Set up the port forwards
-first, then use *Test certificate now*.
+The wizard tests as much as possible itself: DNS against your public IP, a port-by-port test
+from the internet (through check-host.net nodes, or your phone on mobile data), the certificate
+as clients see it, HTTPS from the internet, the subnet router and your first device.
 
 ## First steps
 
@@ -130,8 +128,8 @@ Tailscale. Use the manufacturer's app or an IPP printing app with the address sh
 
 - **"Invalid configuration"**: the log names the option. A common cause is `base_domain`
   overlapping the server domain.
-- **No certificate**: check that external port 443 reaches Home Assistant and that no other
-  app uses port 443 on the host.
+- **Port forward doubts**: Setup → *Port forwarding* → *Test ports automatically*. It shows per
+  port whether the forward reaches this app, something else, or nothing.
 - **Headscale keeps restarting**: the app stops after 5 failed starts, so check the log.
   A port already in use by another app is a common cause.
 - **Upgrades**: Headscale only supports upgrading one minor version at a time (0.29 → 0.30).

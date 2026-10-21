@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0
+
+- **Certificates come from a separate app.** The built-in Let's Encrypt client has been removed.
+  The Let's Encrypt or Duck DNS app puts the certificate in `/ssl`; they use the DNS challenge,
+  which needs no open port and cannot be locked out by failed validations.
+  - Wizard step *Certificate*: lists the certificates in `/ssl` (names, days left), the
+    certificate apps and their state, and sets certificate + server address in one click.
+  - The certificate must cover the server address; otherwise the app explains why.
+  - Headscale restarts by itself when the certificate app renews the certificate.
+  - Existing `tls_mode: letsencrypt` configurations go into setup mode with an explanation.
+- **External port test, port by port:** the app pauses Headscale briefly and listens on
+  443/TCP, 3478/UDP and 41641/UDP itself while check-host.net nodes connect to your public IP.
+  It reports whether each forward reaches *this* app, reaches something else (for example
+  Home Assistant on 8123), or is closed. It also reports whether NAT loopback works.
+  Alternatively you can test with your phone on mobile data through a QR code.
+- **External HTTPS test:** check-host.net nodes open `https://<server>/health`.
+- The services read options from `/data/options.json` instead of the Supervisor API.
+- App linter fixes (removed keys that only repeated the default).
+
 ## 0.2.1
 
 - App version card on the overview with *Check for updates*, *Update* and *Rebuild*

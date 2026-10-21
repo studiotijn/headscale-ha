@@ -78,17 +78,9 @@ def headscale_config(opts: Options, derp_cached: bool = False) -> dict:
         "logtail": {"enabled": False},
         "taildrop": {"enabled": True},
     }
-    if opts.tls_mode == "letsencrypt":
-        cfg.update(
-            {
-                "acme_url": "https://acme-v02.api.letsencrypt.org/directory",
-                "acme_email": opts.acme_email or "",
-                "tls_letsencrypt_hostname": opts.server_host,
-                "tls_letsencrypt_cache_dir": str(paths.HS_DIR / "cache"),
-                "tls_letsencrypt_challenge_type": "TLS-ALPN-01",
-            }
-        )
-    elif opts.tls_mode == "ha_certificate":
+    # Certificates come from a separate app (Let's Encrypt / Duck DNS) via /ssl;
+    # Headscale's own ACME client is never used.
+    if opts.tls_mode == "ha_certificate":
         cfg.update(
             {
                 "tls_cert_path": str(paths.SSL / opts.certfile),

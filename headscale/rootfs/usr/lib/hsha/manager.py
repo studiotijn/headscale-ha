@@ -29,6 +29,7 @@ class Manager:
         self._applied_routes: tuple | None = None
         self._router_parked = False
         self.tls: dict | None = None
+        self._cert_mtime: float | None = None
         self._tls_at = 0.0
         self._lock = asyncio.Lock()
         self._wake = asyncio.Event()
@@ -63,29 +64,50 @@ class Manager:
 
     # ------------------------------------------------------------------- TLS
     async def tls_probe(self, force: bool = False) -> dict:
-        """Check the served certificate like a client does.
+        """Check the served certificate like a client does (loopback, with SNI).
 
-        Without a certificate each check triggers a Let's Encrypt validation, and
-        Let's Encrypt blocks a hostname for an hour after 5 failures. Automatic
-        checks are therefore rare until the user confirms the port forwards.
+        The certificate comes from /ssl, so a check never contacts Let's Encrypt.
         """
         if not self.opts.tls:
             return {"ok": True, "skipped": True}
         now = time.monotonic()
-        forwards_done = self.state.get("wizard", {}).get("answers", {}).get("forwards_done")
-        cert_cached = (paths.HS_DIR / "cache" / self.opts.server_host).exists()
-        safe = self.opts.tls_mode == "ha_certificate" or cert_cached or forwards_done
-        if not force:
-            if not safe:
-                return {"ok": False, "error": "not_checked"}
-            max_age = 300 if (self.tls and self.tls.get("ok")) else 900
-            if self.tls is not None and now - self._tls_at < max_age:
-                return self.tls
+        max_age = 300 if (self.tls and self.tls.get("ok")) else 30
+        if not force and self.tls is not None and now - self._tls_at < max_age:
+            return self.tls
         self.tls = await asyncio.to_thread(netcheck.tls_check, self.opts.server_host, int(self.opts.listen_port), 20)
         self._tls_at = time.monotonic()
         if self.tls.get("ok"):
             self.poke()
         return self.tls
+
+    async def watch_certificate(self) -> None:
+        """Restart Headscale when the certificate app has renewed the certificate in /ssl.
+
+        Headscale reads the certificate only at start; without this a renewed
+        certificate would not be used and the old one would eventually expire.
+        """
+        if self.opts.tls_mode != "ha_certificate":
+            return
+        cert = paths.SSL / self.opts.certfile
+        try:
+            mtime = cert.stat().st_mtime
+        except OSError:
+            return
+        if self._cert_mtime is None:
+            self._cert_mtime = mtime
+            return
+        if mtime != self._cert_mtime:
+            self._cert_mtime = mtime
+            log.info("Certificate /ssl/%s changed: restarting Headscale to load it", self.opts.certfile)
+            proc = await asyncio.create_subprocess_exec(
+                "s6-svc",
+                "-r",
+                "/run/service/headscale",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+            self.tls = None
 
     # ------------------------------------------------------------- bootstrap
     async def bootstrap(self) -> None:
@@ -113,9 +135,7 @@ class Manager:
         status = await tailscale.status()
         backend = status.get("BackendState")
         if backend in ("NeedsLogin", "NoState", "Stopped", "NeedsMachineAuth") or not status.get("Self"):
-            # Every TLS handshake without a certificate makes Headscale ask Let's Encrypt
-            # again, and 5 failed validations per hour block the hostname. Only log in
-            # once a trusted certificate is actually served.
+            # Logging in without a trusted certificate only produces endless retries.
             tls = await self.tls_probe()
             if not tls.get("ok"):
                 if not self._router_parked:
@@ -247,6 +267,7 @@ class Manager:
                 await asyncio.sleep(15)
         while True:
             try:
+                await self.watch_certificate()
                 await self.reconcile_router()
                 self.error = None
             except Exception as exc:

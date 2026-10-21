@@ -9,9 +9,9 @@ Object.assign(STRINGS.nl, {
   wiz_optional: "optioneel", wiz_restarting: "De app herstart met de nieuwe instellingen… Dit duurt meestal 10 tot 30 seconden.",
   wiz_saved_norestart: "Opgeslagen (geen herstart nodig).", wiz_no_supervisor: "Ontwikkelmodus: opgeslagen in options.json.",
   st_ok: "Klaar", st_todo: "Te doen", st_warn: "Let op", st_fail: "Probleem", st_skipped: "Overgeslagen",
-  setup_unconfigured: "Headscale start pas als stap 1 is ingevuld.",
+  setup_unconfigured: "Headscale start pas als stap 1 en 2 zijn ingevuld.",
   setup_invalid: "De instellingen kloppen nog niet, Headscale wacht:",
-  setup_port_in_use: "Headscale wacht: poort {ports} is op deze Home Assistant al in gebruik. Zie stap 2.",
+  setup_port_in_use: "Headscale wacht: poort {ports} is op deze Home Assistant al in gebruik. Zie stap 3.",
 
   // 1 address
   s_address: "Serveradres",
@@ -82,10 +82,10 @@ Object.assign(STRINGS.nl, {
   ext_scan: "Test met je telefoon via 4G (wifi uit):",
   ext_works: "Werkt, ik zie status pass", ext_fails: "Werkt niet",
   ext_fail_help: "Wat je kunt proberen:",
-  ext_f1: "Controleer de port forward (stap 2): extern {ext}/TCP naar {lan}:{port}.",
+  ext_f1: "Controleer de port forward (stap 3): extern {ext}/TCP naar {lan}:{port}.",
   ext_f2: "Sommige routers maken bij een port forward geen firewallregel aan. Kijk of er een ‘allow’-regel voor dezelfde poort nodig is.",
   ext_f3: "Krijg je ‘time-out’ en klopt alles? Dan blokkeert je provider binnenkomende verbindingen (CGNAT). Vraag om een eigen publiek IPv4-adres.",
-  ext_f4: "Zie je een andere website of de Home Assistant-inlog? Dan gaat 443 nog naar iets anders. Kies in stap 2 ‘Ja, al in gebruik’.",
+  ext_f4: "Zie je een andere website of de Home Assistant-inlog? Dan gaat 443 nog naar iets anders. Kies in stap 3 ‘Ja, al in gebruik’.",
 
   // 5 tailscale
   s_tailscale: "Tailscale op deze Home Assistant",
@@ -129,9 +129,9 @@ Object.assign(STRINGS.en, {
   wiz_optional: "optional", wiz_restarting: "The app is restarting with the new settings… This usually takes 10–30 seconds.",
   wiz_saved_norestart: "Saved (no restart needed).", wiz_no_supervisor: "Development mode: saved to options.json.",
   st_ok: "Done", st_todo: "To do", st_warn: "Attention", st_fail: "Problem", st_skipped: "Skipped",
-  setup_unconfigured: "Headscale starts once step 1 is filled in.",
+  setup_unconfigured: "Headscale starts once steps 1 and 2 are filled in.",
   setup_invalid: "The settings are not valid yet; Headscale is waiting:",
-  setup_port_in_use: "Headscale is waiting: port {ports} is already in use on this Home Assistant. See step 2.",
+  setup_port_in_use: "Headscale is waiting: port {ports} is already in use on this Home Assistant. See step 3.",
   s_address: "Server address", s_address_sum: "The address your devices use to find Headscale.",
   i_address: "Your devices connect to Headscale through a fixed internet address. With Duck DNS every sub-domain works automatically: if Home Assistant is at vll6.duckdns.org, hs.vll6.duckdns.org points to your home too, so Home Assistant and Headscale each keep their own name. Avoid changing it later: all devices would have to sign in again.\n\nTailnet domain: the suffix of your devices inside the VPN (laptop.tailnet.home). It must not end with your Duck DNS domain.\n\nAdmin: your Headscale user name. Your devices belong to it and get full access.",
   f_server_url: "Server address", f_admin_user: "Admin (user name)", f_base_domain: "Tailnet domain", use_suggestion: "Use {x}",
@@ -180,10 +180,10 @@ Object.assign(STRINGS.en, {
   i_external: "From inside your own network things often seem to work while they fail from outside, so we test from outside. If Let's Encrypt issued your certificate, it's already proven: Let's Encrypt reached your server itself.\n\nTest yourself: turn off Wi-Fi on your phone, scan the QR code and open the link. If you see {\"status\":\"pass\"}, it works.\n\nThe STUN port (UDP) can't be tested automatically. If it is closed, everything still works through the relay.",
   ext_proven: "Proven: Let's Encrypt reached your server over the internet.", ext_scan: "Test with your phone on mobile data (Wi-Fi off):",
   ext_works: "Works, I see status pass", ext_fails: "Doesn't work", ext_fail_help: "Things to try:",
-  ext_f1: "Check the port forward (step 2): external {ext}/TCP to {lan}:{port}.",
+  ext_f1: "Check the port forward (step 3): external {ext}/TCP to {lan}:{port}.",
   ext_f2: "Some routers don't create a firewall rule with a port forward. Check whether an ‘allow’ rule for the same port is needed.",
   ext_f3: "Time-out while everything looks right? Your ISP blocks incoming connections (CGNAT). Ask for a public IPv4 address.",
-  ext_f4: "Do you see another website or the Home Assistant login? Then 443 still goes elsewhere. Choose ‘Yes, it's in use’ in step 2.",
+  ext_f4: "Do you see another website or the Home Assistant login? Then 443 still goes elsewhere. Choose ‘Yes, it's in use’ in step 3.",
   s_tailscale: "Tailscale on this Home Assistant", s_tailscale_sum: "Makes your home network reachable from the VPN (subnet router).",
   i_tailscale: "This app contains its own Tailscale client. It registers with Headscale automatically as a subnet router for your home network ({lan}), so on the road you reach Home Assistant, Immich, printers and everything on your LAN without installing anything on those devices.\n\nExit node: optional. Your phone can send all its internet traffic through home, handy on public Wi-Fi.\n\nAlso running the separate Tailscale app in Home Assistant? Stop it; they get in each other's way.",
   ts_enable: "Enable Tailscale on Home Assistant", ts_disable: "Disable", ts_exit_on: "Enable exit node", ts_exit_off: "Disable exit node",
@@ -202,6 +202,95 @@ Object.assign(STRINGS.en, {
   s_close8123: "Close port 8123", s_close8123_sum: "Stop exposing Home Assistant directly to the internet.",
   i_close8123: "Now that you reach Home Assistant through the VPN, port 8123 no longer needs to be open on your router. That removes an attack path. In the Home Assistant phone app use the internal address (e.g. http://192.168.1.10:8123) as external URL; it works whenever Tailscale is on. Do this only after your first device works.",
   close_done: "I've closed 8123",
+});
+
+// ---- 0.3.0: certificate from a separate app, external tests (overrides earlier texts)
+Object.assign(STRINGS.nl, {
+  s_certificate: "Certificaat",
+  s_certificate_sum: "Een geldig certificaat uit de Let's Encrypt- of Duck DNS-app.",
+  i_certificate: "Headscale gebruikt het certificaat dat een aparte app in /ssl zet. Zo blijven certificaten op één plek en houdt die app ze automatisch geldig.\n\nLet's Encrypt-app: gebruik de DNS-controle (dns → provider dns-duckdns met je Duck DNS-token). Daarvoor hoeft geen enkele poort open, dus geen risico op blokkades. Zet ‘hs.jouwnaam.duckdns.org’ bij domains als je een apart adres voor Headscale wilt; anders gebruik je je bestaande naam.\nDuck DNS-app: zet lets_encrypt → accept_terms aan; het certificaat geldt voor je Duck DNS-naam.\n\nLet op: de Let's Encrypt-app draait alleen kort om te vernieuwen. Laat hem met een automatisering elke week starten, of gebruik de Duck DNS-app die zelf blijft draaien. Deze app herstart Headscale vanzelf zodra het certificaat vernieuwd is.",
+  cert_none: "Er staat nog geen certificaat in /ssl. Installeer en start de Let's Encrypt- of Duck DNS-app (zie ⓘ) en kom hier terug.",
+  cert_list: "Gevonden certificaten:", cert_valid_for: "geldig voor", cert_days: "nog {n} dagen geldig", cert_expired: "verlopen",
+  cert_use: "Gebruik voor {host}", cert_in_use: "in gebruik",
+  cert_problem: "Het gekozen certificaat past niet:", cert_expiring: "Het certificaat verloopt binnenkort. Draait de certificaat-app nog?",
+  cert_providers: "Certificaat-apps:", cert_app_started: "draait", cert_app_stopped: "gestopt",
+  cert_le_note: "De Let's Encrypt-app is gestopt; dat is normaal tussen vernieuwingen door. Zorg dat hij periodiek start.",
+  builtin_le_removed: "De ingebouwde Let's Encrypt is verwijderd. Kies hieronder een certificaat uit /ssl.",
+  proxy_mode: "Geen certificaat: mijn eigen reverse proxy doet HTTPS (gevorderd)",
+  s_tls: "HTTPS-test",
+  s_tls_sum: "Headscale gebruikt het certificaat zoals je apparaten het zien.",
+  i_tls: "Deze test maakt binnen Home Assistant een HTTPS-verbinding met Headscale onder het serveradres, precies zoals een Tailscale-app dat doet, en controleert of het certificaat vertrouwd wordt en bij de naam past.",
+  tls_no_cert: "Headscale levert geen certificaat. Controleer stap 1.",
+  tls_c1: "Het certificaat uit stap 1 hoort niet bij het serveradres uit stap 2.",
+  tls_c2: "Headscale is na het wijzigen nog niet herstart.",
+  tls_c3: "Het certificaat is verlopen.",
+  tls_c4: "Bekijk het logboek van de app voor de exacte foutmelding.",
+  tls_test: "Opnieuw testen", tls_test_hint: "",
+  waiting_forwards: "",
+  alt_internal_desc: "Je router stuurt extern 443 door naar intern 8443. Voor de buitenwereld blijft het poort 443. Aanbevolen als iets op je HA-host 443 gebruikt.",
+  alt_extport: "Een andere externe poort (8443)",
+  alt_extport_desc: "Laat 443 zoals hij is en gebruik extern 8443 voor Headscale. Werkt prima met het certificaat uit /ssl; je serveradres krijgt dan :8443.",
+  alt_extport_use: "Gebruik https://{name}:8443",
+  alt_extport_none: "Kies eerst een certificaat in stap 1.",
+  // port test
+  pt_title: "Test van buitenaf, per poort",
+  pt_intro: "De app pauzeert Headscale een halve minuut en luistert zelf op de poorten. Externe meetpunten (check-host.net) maken verbinding met je publieke IP. Komt die verbinding hier binnen, dan weet je zeker dat de forward bij déze app uitkomt.",
+  pt_auto: "Test poorten automatisch", pt_phone: "Test met mijn telefoon (4G)",
+  pt_running: "Bezig… nog {n} s", pt_phone_scan: "Zet wifi uit op je telefoon, scan de code en open de link. Zie je een groen vinkje, dan werkt poort {port}.",
+  pt_result: "Resultaat van {time}:",
+  pt_tcp_ok: "TCP {port} → komt aan bij Headscale ✓ (gezien vanaf {src})",
+  pt_tcp_elsewhere: "TCP {port}: er antwoordt wel iets, maar niet deze app. De forward wijst naar een ander apparaat of een andere poort (bijv. 8123). Zet Forward Port op {internal} en het doel op {lan}.",
+  pt_tcp_closed: "TCP {port}: geen verbinding van buitenaf. De forward ontbreekt, staat uit, of je provider blokkeert de poort (CGNAT).",
+  pt_udp_ok: "UDP {port} → komt aan ✓", pt_udp_not_seen: "UDP {port}: niets ontvangen. Controleer de UDP-forward. Let op: niet elk meetpunt verstuurt UDP betrouwbaar; werkt TCP wel, test dan later met een apparaat.",
+  pt_optional: "(optioneel)", pt_hairpin_yes: "NAT-loopback werkt: thuis werkt het adres ook.", pt_hairpin_no: "NAT-loopback werkt niet: thuis kan het serveradres haperen. Dat is meestal geen probleem, Tailscale vindt dan een directe route.",
+  pt_error: "Test mislukt: {err}", pt_privacy: "Je publieke IP wordt hiervoor naar check-host.net gestuurd.",
+  pt_no_public_ip: "Kon het publieke IP-adres niet bepalen. Heeft Home Assistant internet?",
+  tcp_elsewhere: "", tcp_closed: "", udp_not_seen: "",
+  // external
+  ext_auto: "Automatisch testen van buitenaf", ext_auto_intro: "Meetpunten op internet openen {url}, zoals je telefoon onderweg zou doen.",
+  ext_auto_ok: "Bereikbaar vanaf internet ✓", ext_auto_fail: "Niet bereikbaar vanaf internet", ext_node: "{loc}: {res}",
+  ext_need_tls: "Doe eerst de HTTPS-test (stap 4).", ext_report: "Volledig rapport",
+  ext_manual: "Of test zelf met je telefoon via 4G (wifi uit):",
+});
+Object.assign(STRINGS.en, {
+  s_certificate: "Certificate",
+  s_certificate_sum: "A valid certificate from the Let's Encrypt or Duck DNS app.",
+  i_certificate: "Headscale uses the certificate a separate app puts in /ssl, so certificates live in one place and that app keeps them valid.\n\nLet's Encrypt app: use the DNS challenge (dns → provider dns-duckdns with your Duck DNS token). No port needs to be open, so no risk of lock-outs. Add ‘hs.yourname.duckdns.org’ to domains for a separate Headscale address, or use your existing name.\nDuck DNS app: enable lets_encrypt → accept_terms; the certificate covers your Duck DNS name.\n\nNote: the Let's Encrypt app only runs briefly to renew. Start it weekly with an automation, or use the Duck DNS app which keeps running. This app restarts Headscale by itself when the certificate is renewed.",
+  cert_none: "No certificate in /ssl yet. Install and start the Let's Encrypt or Duck DNS app (see ⓘ) and come back.",
+  cert_list: "Certificates found:", cert_valid_for: "valid for", cert_days: "{n} days left", cert_expired: "expired",
+  cert_use: "Use for {host}", cert_in_use: "in use",
+  cert_problem: "The selected certificate doesn't fit:", cert_expiring: "The certificate expires soon. Is the certificate app still running?",
+  cert_providers: "Certificate apps:", cert_app_started: "running", cert_app_stopped: "stopped",
+  cert_le_note: "The Let's Encrypt app is stopped; that's normal between renewals. Make sure it starts periodically.",
+  builtin_le_removed: "The built-in Let's Encrypt has been removed. Choose a certificate from /ssl below.",
+  proxy_mode: "No certificate: my own reverse proxy handles HTTPS (advanced)",
+  s_tls: "HTTPS test", s_tls_sum: "Headscale presents the certificate the way your devices see it.",
+  i_tls: "This test connects to Headscale over HTTPS under the server address from inside Home Assistant, exactly like a Tailscale app does, and checks that the certificate is trusted and matches the name.",
+  tls_no_cert: "Headscale presents no certificate. Check step 1.",
+  tls_c1: "The certificate from step 1 doesn't match the server address from step 2.",
+  tls_c2: "Headscale hasn't restarted since the change.", tls_c3: "The certificate expired.",
+  tls_c4: "Check the app log for the exact error.", tls_test: "Test again", tls_test_hint: "", waiting_forwards: "",
+  alt_internal_desc: "Your router forwards external 443 to internal 8443. For the outside world it stays port 443. Recommended when something on the HA host uses 443.",
+  alt_extport: "Another external port (8443)",
+  alt_extport_desc: "Keep 443 as it is and use external 8443 for Headscale. Works fine with the certificate from /ssl; your server address gets :8443.",
+  alt_extport_use: "Use https://{name}:8443", alt_extport_none: "Choose a certificate in step 1 first.",
+  pt_title: "External test, port by port",
+  pt_intro: "The app pauses Headscale for half a minute and listens on the ports itself. External probes (check-host.net) connect to your public IP. If the connection arrives here, the forward definitely reaches this app.",
+  pt_auto: "Test ports automatically", pt_phone: "Test with my phone (mobile data)",
+  pt_running: "Running… {n} s left", pt_phone_scan: "Turn off Wi-Fi on your phone, scan the code and open the link. A green check mark means port {port} works.",
+  pt_result: "Result of {time}:",
+  pt_tcp_ok: "TCP {port} → reaches Headscale ✓ (seen from {src})",
+  pt_tcp_elsewhere: "TCP {port}: something answers, but not this app. The forward points to another device or port (e.g. 8123). Set the forward port to {internal} and the target to {lan}.",
+  pt_tcp_closed: "TCP {port}: no connection from outside. The forward is missing or disabled, or your ISP blocks the port (CGNAT).",
+  pt_udp_ok: "UDP {port} → arrives ✓", pt_udp_not_seen: "UDP {port}: nothing received. Check the UDP forward. Note: not every probe sends UDP reliably; if TCP works, test later with a device.",
+  pt_optional: "(optional)", pt_hairpin_yes: "NAT loopback works: the address also works at home.", pt_hairpin_no: "NAT loopback doesn't work: at home the server address may hiccup. Usually not a problem; Tailscale finds a direct path.",
+  pt_error: "Test failed: {err}", pt_privacy: "Your public IP is sent to check-host.net for this.",
+  pt_no_public_ip: "Couldn't determine the public IP address. Does Home Assistant have internet access?",
+  tcp_elsewhere: "", tcp_closed: "", udp_not_seen: "",
+  ext_auto: "Test automatically from outside", ext_auto_intro: "Probes on the internet open {url}, as your phone would on the road.",
+  ext_auto_ok: "Reachable from the internet ✓", ext_auto_fail: "Not reachable from the internet", ext_node: "{loc}: {res}",
+  ext_need_tls: "Do the HTTPS test (step 4) first.", ext_report: "Full report",
+  ext_manual: "Or test yourself with your phone on mobile data (Wi-Fi off):",
 });
 
 const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };
@@ -332,7 +421,7 @@ const BODIES = {
       el("div", { class: "choices" }, ...[["free", "a_free"], ["busy", "a_busy"], ["unknown", "a_unknown"]].map(([v, k]) =>
         el("button", { class: `btn small ${d.router443 === v ? "" : "secondary"}`, type: "button", onclick: () => answer("router443", v) }, t(k)))));
     out.push(q);
-    if (d.router443 === "unknown") out.push(note("info", fmt("unknown_help", { host: (wizardData.steps[0].data.server_url || "").replace(/^https?:\/\//, "") })));
+    if (d.router443 === "unknown") out.push(note("info", fmt("unknown_help", { host: (wizardData.steps.find((x) => x.id === "address").data.server_url || "").replace(/^https?:\/\//, "") })));
     if (d.router443 === "busy") {
       const certs = d.certificates || [];
       const certButtons = certs.flatMap((c) => c.names.filter((n) => !n.startsWith("*.")).map((n) => {
@@ -585,6 +674,193 @@ async function renderProgressCard() {
     el("p", { class: "muted" }, next ? `${t("wiz_next")}: ${t(`s_${next.id}`)}` : t("wiz_done_all")));
   card.hidden = false;
 }
+
+
+// ---- 0.3.0 step bodies -------------------------------------------------------
+function certExpiry(c) {
+  if (c.days_left == null) return "";
+  return c.days_left < 0 ? t("cert_expired") : fmt("cert_days", { n: c.days_left });
+}
+
+BODIES.certificate = (s) => {
+  const d = s.data;
+  const out = [];
+  if (s.issues.includes("builtin_le_removed")) out.push(note("warn", t("builtin_le_removed")));
+  if ((d.providers || []).length) {
+    out.push(el("p", { class: "label" }, t("cert_providers")),
+      el("ul", { class: "plain" }, ...d.providers.map((p) => el("li", {}, `${p.name}: `,
+        el("span", { class: `pill ${p.state === "started" ? "ok" : ""}` }, p.state === "started" ? t("cert_app_started") : t("cert_app_stopped"))))));
+    if (d.providers.some((p) => p.kind === "letsencrypt" && p.state !== "started")) out.push(note("info", t("cert_le_note")));
+  }
+  if (!(d.certificates || []).length) {
+    out.push(note("info", t("cert_none")));
+  } else {
+    out.push(el("p", { class: "label" }, t("cert_list")));
+    out.push(el("ul", { class: "found" }, ...d.certificates.map((c) => {
+      const inUse = d.tls_mode === "ha_certificate" && c.file === d.certfile;
+      const buttons = c.names.map((n) => {
+        const host = n.startsWith("*.") ? `hs.${n.slice(2)}` : n;
+        const b = el("button", { class: `btn small ${inUse && host === d.server_host ? "" : "secondary"}`, type: "button" }, fmt("cert_use", { host }));
+        b.addEventListener("click", () => {
+          const ports = wizardData.steps.find((x) => x.id === "ports").data;
+          const port = ports.external_port && ports.external_port !== 443 ? `:${ports.external_port}` : "";
+          saveOptions({ tls_mode: "ha_certificate", certfile: c.file, keyfile: c.keyfile || "privkey.pem", server_url: `https://${host}${port}` }, b);
+        });
+        return b;
+      });
+      return el("li", {},
+        el("div", {}, el("strong", {}, c.file), inUse ? el("span", { class: "pill ok" }, ` ${t("cert_in_use")}`) : "",
+          el("div", { class: "muted" }, `${t("cert_valid_for")} ${c.names.join(", ")} · ${certExpiry(c)}`)),
+        el("div", { class: "actions" }, ...buttons));
+    })));
+  }
+  if (s.issues.includes("cert_problem")) out.push(note("fail", el("p", {}, t("cert_problem")), el("p", {}, d.problem)));
+  if (s.issues.includes("cert_expiring")) out.push(note("warn", t("cert_expiring")));
+  const proxy = el("details", {}, el("summary", {}, t("proxy_mode")), el("p", { class: "muted" }, t("alt_proxy_desc")));
+  const pb = el("button", { class: "btn secondary small", type: "button" }, t("apply"));
+  pb.addEventListener("click", () => saveOptions({ tls_mode: "none", listen_port: 8080 }, pb));
+  proxy.append(el("div", { class: "actions" }, pb));
+  if (d.tls_mode === "none") {
+    proxy.open = true;
+    proxy.append(el("label", { class: "check" }, el("input", { type: "checkbox", ...(s.status === "ok" ? { checked: "" } : {}), onchange: (e) => answer("proxy_ok", e.target.checked) }), " ", fmt("proxy_confirm", { port: 8080 })));
+  }
+  out.push(proxy);
+  return out;
+};
+
+const baseAddress = BODIES.address;
+BODIES.address = (s) => {
+  const out = baseAddress(s);
+  const certStep = wizardData.steps.find((x) => x.id === "certificate");
+  const names = (certStep.data.certificates || []).flatMap((c) => c.names).map((n) => (n.startsWith("*.") ? `hs.${n.slice(2)}` : n));
+  if (names.length && !s.data.configured) {
+    const input = out[0].querySelector("input[name=server_url]");
+    out.splice(1, 0, el("div", { class: "actions" }, ...[...new Set(names)].map((n) =>
+      el("button", { class: "btn secondary small", type: "button", onclick: () => { input.value = `https://${n}`; } }, fmt("use_suggestion", { x: n })))));
+  }
+  return out;
+};
+
+const basePorts = BODIES.ports;
+BODIES.ports = (s) => {
+  const d = s.data;
+  // The "another external port" alternative no longer needs a special certificate.
+  const out = basePorts(s).map((node) => {
+    if (!(node instanceof Element) || !node.classList.contains("alternatives")) return node;
+    node.querySelectorAll(".alt").forEach((alt) => {
+      if (alt.querySelector("strong")?.textContent === t("alt_extport")) {
+        const host = (wizardData.steps.find((x) => x.id === "address").data.server_url || "").replace(/^https?:\/\//, "").replace(/:\d+$/, "");
+        alt.querySelectorAll(".actions").forEach((a) => a.remove());
+        if (host) {
+          const b = el("button", { class: "btn small", type: "button" }, fmt("alt_extport_use", { name: host }));
+          b.addEventListener("click", () => saveOptions({ server_url: `https://${host}:8443`, listen_port: 8443 }, b));
+          alt.append(el("div", { class: "actions" }, b));
+        } else {
+          alt.append(note("warn", t("alt_extport_none")));
+        }
+      }
+    });
+    return node;
+  });
+  out.push(portTestBox(d));
+  return out;
+};
+
+let portTestTimer = null;
+function portTestBox(d) {
+  const box = el("div", { class: "porttest" }, el("p", { class: "label" }, t("pt_title")), el("p", { class: "muted small" }, t("pt_intro")));
+  const run = d.port_test_running;
+  if (run) {
+    box.append(note("info", fmt("pt_running", { n: run.seconds_left ?? "…" })));
+    if (run.phone_url) box.append(el("div", { class: "qr-row" }, qr(run.phone_url), el("div", {}, el("p", {}, fmt("pt_phone_scan", { port: d.external_port })), copyable(run.phone_url))));
+    if (!portTestTimer) {
+      portTestTimer = setTimeout(async () => { portTestTimer = null; await loadWizard(false).catch(() => {}); }, 2000);
+    }
+    return box;
+  }
+  if (!d.port_test_possible) return box;
+  const auto = el("button", { class: "btn", type: "button" }, t("pt_auto"));
+  const phone = el("button", { class: "btn secondary", type: "button" }, t("pt_phone"));
+  for (const [b, mode] of [[auto, "auto"], [phone, "phone"]]) {
+    b.addEventListener("click", async () => {
+      busy(b, true);
+      try { await api("wizard/porttest", { method: "POST", body: { mode } }); await loadWizard(false); }
+      catch (err) { banner(err.message); } finally { busy(b, false); }
+    });
+  }
+  box.append(el("div", { class: "actions" }, auto, phone), el("p", { class: "muted small" }, t("pt_privacy")));
+  const r = d.port_test;
+  if (r) {
+    const lan = d.lan_ip || "<HA-IP>";
+    const lines = [];
+    const tcp = r.tcp || {};
+    lines.push(note(tcp.status === "ok" ? "ok" : "fail", fmt(`pt_tcp_${tcp.status}`, { port: tcp.port, internal: tcp.internal, lan, src: (tcp.sources || []).join(", ") })));
+    for (const u of r.udp || []) {
+      lines.push(note(u.status === "ok" ? "ok" : (u.optional ? "info" : "warn"), `${fmt(`pt_udp_${u.status}`, { port: u.port })} ${u.optional ? t("pt_optional") : ""}`));
+    }
+    lines.push(el("p", { class: "muted small" }, r.hairpin ? t("pt_hairpin_yes") : t("pt_hairpin_no")));
+    box.append(el("p", { class: "label" }, fmt("pt_result", { time: new Date(r.time * 1000).toLocaleTimeString(LANG) })), ...lines);
+  }
+  return box;
+}
+
+BODIES.tls = (s) => {
+  const d = s.data;
+  const ports = wizardData.steps.find((x) => x.id === "ports").data;
+  const out = [];
+  const c = d.check;
+  if (d.tls_mode === "none") return [note("info", fmt("proxy_confirm", { port: d.listen_port }))];
+  if (c && c.ok) {
+    out.push(note("ok", fmt("tls_ok", { issuer: c.issuer, date: c.expires ? new Date(c.expires * 1000).toLocaleDateString(LANG) : "?" }), el("div", { class: "muted" }, t("tls_ok_hint"))));
+  } else if (s.issues.includes("headscale_down")) {
+    out.push(note("fail", t("headscale_down")));
+  } else if (c) {
+    out.push(note("fail", fmt(`tls_${c.error}`, { detail: c.detail, port: ports.listen_port }),
+      el("p", {}, t("tls_causes")), el("ul", {}, ...["tls_c1", "tls_c2", "tls_c3", "tls_c4"].map((k) => el("li", {}, t(k))))));
+  }
+  const tb = el("button", { class: "btn secondary small", type: "button" }, t("tls_test"));
+  tb.addEventListener("click", async () => {
+    busy(tb, true);
+    try { wizardData = await api("wizard?refresh=1&tls=1"); renderWizard(); } catch (err) { banner(err.message); } finally { busy(tb, false); }
+  });
+  out.push(el("div", { class: "actions" }, tb));
+  return out;
+};
+
+BODIES.external = (s) => {
+  const d = s.data;
+  const out = [];
+  if (!d.possible) out.push(note("info", t("ext_need_tls")));
+  const b = el("button", { class: "btn", type: "button" }, t("ext_auto"));
+  if (!d.possible) b.disabled = true;
+  b.addEventListener("click", async () => {
+    busy(b, true);
+    try { await api("wizard/external", { method: "POST" }); await loadWizard(false); }
+    catch (err) { banner(err.message); } finally { busy(b, false); }
+  });
+  out.push(el("p", { class: "muted small" }, fmt("ext_auto_intro", { url: d.health_url })), el("div", { class: "actions" }, b));
+  const a = d.auto;
+  if (a) {
+    const res = (n) => (n.ok ? "✓ 200" : n.ok === false ? `✕ ${n.code || ""} ${n.message || ""}`.trim() : "…");
+    out.push(note(a.ok ? "ok" : a.ok === false ? "fail" : "warn",
+      el("p", {}, a.ok ? t("ext_auto_ok") : a.ok === false ? t("ext_auto_fail") : (a.error || "?")),
+      el("ul", {}, ...(a.nodes || []).map((n) => el("li", {}, fmt("ext_node", { loc: n.location, res: res(n) })))),
+      a.report ? el("a", { href: a.report, target: "_blank", rel: "noopener" }, t("ext_report")) : ""));
+    if (a.ok === false) {
+      const ports = wizardData.steps.find((x) => x.id === "ports").data;
+      out.push(note("warn", el("ul", {}, ...["ext_f1", "ext_f2", "ext_f3", "ext_f4"].map((k) =>
+        el("li", {}, fmt(k, { ext: ports.external_port, lan: ports.lan_ip || "<HA-IP>", port: ports.listen_port }))))));
+    }
+  }
+  if (d.health_url) {
+    out.push(el("details", {}, el("summary", {}, t("ext_manual")),
+      el("div", { class: "qr-row" }, qr(d.health_url), el("div", {}, copyable(d.health_url),
+        el("div", { class: "actions" },
+          el("button", { class: `btn small ${d.answer === true ? "" : "secondary"}`, type: "button", onclick: () => answer("external_ok", true) }, `✓ ${t("ext_works")}`),
+          el("button", { class: `btn small ${d.answer === false ? "danger-fill" : "secondary"}`, type: "button", onclick: () => answer("external_ok", false) }, t("ext_fails")))))));
+  }
+  return out;
+};
 
 loaders.setup = () => { wizardDirty = false; return loadWizard(false); };
 // Unsaved edits in the wizard pause the automatic refresh.

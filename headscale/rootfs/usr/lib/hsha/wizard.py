@@ -10,11 +10,10 @@ import asyncio
 import contextlib
 import ipaddress
 import logging
-import ssl
 import time
 from urllib.parse import urlsplit
 
-from . import hs, netcheck, paths, supervisor
+from . import certs, hs, netcheck, paths, probe, supervisor
 from .options import DEFAULTS, Options, OptionsError
 from .policy import ROUTER_TAG
 from .store import read_json, save_state, write_json
@@ -25,7 +24,6 @@ log = logging.getLogger("hsha.wizard")
 EDITABLE = {
     "server_url": str,
     "tls_mode": str,
-    "acme_email": str,
     "certfile": str,
     "keyfile": str,
     "listen_port": int,
@@ -47,13 +45,26 @@ ANSWERS = {
     "close8123_done": {True, False},
 }
 OPTIONAL_STEPS = {"headplane", "printers", "close8123"}
-STEP_ORDER = ["address", "ports", "tls", "external", "tailscale", "device", "headplane", "printers", "close8123"]
+STEP_ORDER = [
+    "certificate",
+    "address",
+    "ports",
+    "tls",
+    "external",
+    "tailscale",
+    "device",
+    "headplane",
+    "printers",
+    "close8123",
+]
 
 
 class Wizard:
     def __init__(self, app):
         self.app = app  # web.App: provides .opts and .manager
         self._cache: dict[str, tuple[float, object]] = {}
+        self.port_test: probe.PortTest | None = None
+        self._port_task: asyncio.Task | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -80,34 +91,6 @@ class Wizard:
         self._cache[key] = (now, value)
         return value
 
-    @staticmethod
-    def ssl_certificates() -> list[dict]:
-        """Certificates in /ssl with the hostnames they cover (for tls_mode ha_certificate)."""
-        out = []
-        if not paths.SSL.is_dir():
-            return out
-        for f in sorted(paths.SSL.glob("*.pem")) + sorted(paths.SSL.glob("*.crt")):
-            try:
-                info = ssl._ssl._test_decode_cert(str(f))
-            except Exception:
-                continue
-            names = [v for k, v in info.get("subjectAltName", ()) if k == "DNS"]
-            key_guess = None
-            for cand in ("privkey.pem", f.name.replace("fullchain", "privkey"), f.name.replace(".crt", ".key")):
-                if (paths.SSL / cand).is_file() and cand != f.name:
-                    key_guess = cand
-                    break
-            out.append({"file": f.name, "names": names, "expires": info.get("notAfter"), "keyfile": key_guess})
-        return out
-
-    @staticmethod
-    def covers(names: list[str], host: str) -> bool:
-        for n in names:
-            n = n.lower()
-            if n == host or (n.startswith("*.") and host.endswith(n[1:]) and host.count(".") == n.count(".")):
-                return True
-        return False
-
     # ------------------------------------------------------------ steps
     async def evaluate(self, refresh: bool = False, force_tls: bool = False) -> dict:
         o = self.opts
@@ -118,7 +101,44 @@ class Wizard:
         hs_running = await asyncio.to_thread(netcheck.tcp_listening, int(o.listen_port))
         steps: dict[str, dict] = {}
 
-        # 1. Address ----------------------------------------------------------
+        # 1. Certificate (from a separate app via /ssl) ------------------------------
+        inventory = await asyncio.to_thread(certs.inventory)
+        providers = await self._cached("certapps", 60, refresh, supervisor.certificate_apps)
+        providers = providers if isinstance(providers, list) else []
+        cert_problem = None
+        issues = []
+        if o.tls_mode == "none":
+            status = "ok" if answers.get("proxy_ok") else "todo"
+        elif o.tls_mode == "letsencrypt":
+            status, issues = "fail", ["builtin_le_removed"]
+        elif not inventory:
+            status, issues = "todo", ["no_certificates"]
+        else:
+            cert_problem = certs.check(o.certfile, o.keyfile, o.server_host) if o.configured else None
+            chosen = next((c for c in inventory if c["file"] == o.certfile), None)
+            if not o.configured:
+                status = "todo"
+            elif cert_problem:
+                status, issues = "fail", ["cert_problem"]
+            elif chosen and chosen["days_left"] is not None and chosen["days_left"] < 14:
+                status, issues = "warn", ["cert_expiring"]
+            else:
+                status = "ok"
+        steps["certificate"] = {
+            "status": status,
+            "issues": issues,
+            "data": {
+                "tls_mode": o.tls_mode,
+                "certfile": o.certfile,
+                "keyfile": o.keyfile,
+                "certificates": inventory,
+                "providers": providers,
+                "problem": cert_problem,
+                "server_host": o.server_host if o.configured else "",
+            },
+        }
+
+        # 2. Address ----------------------------------------------------------
         dns = {}
         if o.configured:
             resolved = await self._cached(f"dns:{o.server_host}", 60, refresh, netcheck.resolve_a, o.server_host)
@@ -162,9 +182,16 @@ class Wizard:
         local_busy = [p for p in (ports.get("tcp"), ports.get("udp")) if p and not p.get("free")]
         if setup and setup.get("reason") == "port_in_use":
             local_busy = [{"port": p} for p in setup.get("ports", [])]
+        test = self.wstate.get("port_test")
         issues = []
         if local_busy:
             status, issues = "fail", ["local_port_in_use"]
+        elif test and test.get("tcp", {}).get("status") == "ok":
+            status = "ok"
+            if any(u["status"] != "ok" and not u["optional"] for u in test.get("udp", [])):
+                issues = ["udp_not_seen"]
+        elif test and test.get("tcp", {}).get("status") in ("elsewhere", "closed"):
+            status, issues = "fail", [f"tcp_{test['tcp']['status']}"]
         elif answers.get("forwards_done"):
             status = "ok"
         elif answers.get("router443") == "busy":
@@ -183,13 +210,16 @@ class Wizard:
                 "local_busy": [p["port"] for p in local_busy],
                 "router443": answers.get("router443"),
                 "forwards_done": bool(answers.get("forwards_done")),
-                "certificates": self.ssl_certificates(),
+                "certificates": inventory,
+                "port_test": test,
+                "port_test_running": self.port_test.view()
+                if self.port_test and self.port_test.state not in ("done", "error")
+                else None,
+                "port_test_possible": o.tls_mode != "none" and not local_busy,
             },
         }
 
-        # 3. TLS ---------------------------------------------------------------
-        # A check makes Headscale contact Let's Encrypt when it has no certificate yet,
-        # so it only runs once the port forwards are confirmed (or on explicit retest).
+        # 4. HTTPS: Headscale serves a certificate clients trust -------------------
         tls = None
         issues = []
         if o.tls_mode == "none":
@@ -199,32 +229,24 @@ class Wizard:
         elif not hs_running:
             status, issues = "fail", ["headscale_down"]
         else:
-            tls = await self.app.manager.tls_probe(force=force_tls)
+            tls = await self.app.manager.tls_probe(force=force_tls or refresh)
             if tls.get("ok"):
                 status = "ok"
-            elif tls.get("error") == "not_checked":
-                status, issues, tls = "todo", ["waiting_forwards"], None
             else:
                 status, issues = "fail", [f"tls_{tls.get('error', 'unknown')}"]
         steps["tls"] = {
             "status": status,
             "issues": issues,
-            "data": {
-                "tls_mode": o.tls_mode,
-                "acme_email": o.acme_email,
-                "certfile": o.certfile,
-                "keyfile": o.keyfile,
-                "check": tls,
-                "certificates": steps["ports"]["data"]["certificates"],
-                "external_port": o.external_port,
-            },
+            "data": {"tls_mode": o.tls_mode, "check": tls, "listen_port": o.listen_port},
         }
 
-        # 4. Reachable from the internet ------------------------------------------
-        proven = bool(tls and tls.get("ok") and tls.get("lets_encrypt") and o.tls_mode == "letsencrypt")
-        if proven or answers.get("external_ok") is True:
+        # 5. Reachable from the internet (HTTPS end-to-end) ------------------------
+        ext = self.wstate.get("external_test")
+        if ext and ext.get("server_url") != o.server_url_clean:
+            ext = None
+        if (ext and ext.get("ok")) or answers.get("external_ok") is True:
             status = "ok"
-        elif answers.get("external_ok") is False:
+        elif (ext and ext.get("ok") is False) or answers.get("external_ok") is False:
             status = "fail"
         else:
             status = "todo"
@@ -233,8 +255,9 @@ class Wizard:
             "issues": [],
             "data": {
                 "health_url": f"{o.server_url_clean}/health" if o.configured else "",
-                "proven_by_letsencrypt": proven,
+                "auto": ext,
                 "answer": answers.get("external_ok"),
+                "possible": steps["tls"]["status"] == "ok",
             },
         }
 
@@ -317,6 +340,49 @@ class Wizard:
             "supervisor": supervisor.available(),
             "steps": out,
         }
+
+    # ------------------------------------------------------------ port test
+    def start_port_test(self, mode: str) -> dict:
+        if self.port_test and self.port_test.state not in ("done", "error"):
+            return self.port_test.view()
+        o = self.opts
+        if mode not in ("auto", "phone"):
+            raise ValueError("mode must be auto or phone")
+        if o.tls_mode == "none":
+            raise ValueError("The port test is not available behind your own reverse proxy (tls_mode none)")
+        self.port_test = probe.PortTest(
+            listen_port=int(o.listen_port),
+            external_port=int(o.external_port),
+            stun_port=int(o.stun_port) if o.derp_enabled else None,
+            test_ts_port=bool(o.subnet_router),
+            mode=mode,
+            duration=25 if mode == "auto" else 120,
+        )
+        self._port_task = asyncio.create_task(self._run_port_test(self.port_test))
+        return self.port_test.view()
+
+    async def _run_port_test(self, test: probe.PortTest) -> None:
+        await test.run()
+        if test.results:
+            self.wstate["port_test"] = {**test.results, "time": int(time.time())}
+            if test.results["tcp"]["status"] == "ok":
+                self.wstate["answers"]["forwards_done"] = True
+            save_state(self.app.manager.state)
+            self.app.manager.poke()
+
+    async def external_test(self) -> dict:
+        """Fetch https://<server>/health from check-host.net nodes (outside the home network)."""
+        o = self.opts
+        url = f"{o.server_url_clean}/health"
+        result = await asyncio.to_thread(probe.external_https, url)
+        result["server_url"] = o.server_url_clean
+        result["time"] = int(time.time())
+        self.wstate["external_test"] = result
+        save_state(self.app.manager.state)
+        return result
+
+    def port_test_view(self) -> dict | None:
+        return self.port_test.view() if self.port_test else None
 
     # ------------------------------------------------------------ answers
     def answer(self, key: str, value) -> None:

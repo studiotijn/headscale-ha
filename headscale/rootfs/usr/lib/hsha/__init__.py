@@ -1,3 +1,3 @@
 """Headscale HA: glue between Home Assistant, Headscale, Headplane and Tailscale."""
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"

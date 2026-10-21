@@ -169,3 +169,15 @@ def rebuild_self(slug: str) -> None:
     except SupervisorError as exc:
         if "connection" not in str(exc).lower() and "remote end" not in str(exc).lower():
             raise
+
+
+def certificate_apps() -> list[dict]:
+    """Installed apps that can provide a certificate in /ssl (Let's Encrypt, Duck DNS)."""
+    data = _get("/addons") or {}
+    out = []
+    for app in data.get("addons", []):
+        slug = str(app.get("slug", ""))
+        for suffix, label in (("letsencrypt", "Let's Encrypt"), ("duckdns", "Duck DNS")):
+            if slug.endswith(suffix):
+                out.append({"slug": slug, "name": app.get("name") or label, "state": app.get("state"), "kind": suffix})
+    return out

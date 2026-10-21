@@ -4,7 +4,7 @@
 # Tailscale daemon acting as subnet router (and optional exit node) for the LAN.
 # Registration and route approval are handled by the web UI process (hsha.manager).
 # ==============================================================================
-if ! bashio::config.true 'subnet_router'; then
+if [[ "$(python3 -m hsha.opt subnet_router)" != "true" ]]; then
     bashio::log.info "Subnet router disabled"
     exec sleep infinity
 fi
@@ -17,7 +17,7 @@ declare -a options=(
     "--no-logs-no-support"
 )
 
-if bashio::config.true 'userspace_networking'; then
+if [[ "$(python3 -m hsha.opt userspace_networking)" == "true" ]]; then
     options+=("--tun=userspace-networking")
 else
     if [[ ! -c /dev/net/tun ]]; then

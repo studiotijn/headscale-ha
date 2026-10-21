@@ -5,12 +5,10 @@ configuration:
   tls_mode:
     name: TLS-modus
     description: >-
-      letsencrypt = Headscale vraagt zelf een certificaat aan (poort 443 moet vanaf internet bereikbaar zijn);
-      ha_certificate = gebruik een certificaat uit /ssl (bijv. van de Duck DNS- of Let's Encrypt-app);
-      none = gewoon HTTP, alleen als je zelf een reverse proxy ervoor zet.
+      Bron van het certificaat. ha_certificate = een certificaat uit /ssl van de Let's Encrypt- of Duck DNS-app (aanbevolen); none = gewoon HTTP achter je eigen reverse proxy. De ingebouwde letsencrypt-modus is verwijderd.
   acme_email:
     name: Let's Encrypt-e-mail
-    description: Optioneel e-mailadres voor meldingen over verlopende certificaten.
+    description: Wordt niet meer gebruikt (het certificaat komt van de Let's Encrypt- of Duck DNS-app).
   certfile:
     name: Certificaatbestand
     description: Bestand in /ssl, voor TLS-modus ha_certificate.

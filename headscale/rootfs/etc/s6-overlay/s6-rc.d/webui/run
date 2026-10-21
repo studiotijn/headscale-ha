@@ -4,7 +4,7 @@
 # Ingress web UI, bootstrap and subnet-router coordination
 # ==============================================================================
 export HSHA_LOG_LEVEL
-HSHA_LOG_LEVEL="$(bashio::config 'log_level')"
+HSHA_LOG_LEVEL="$(python3 -m hsha.opt log_level)"
 [[ "${HSHA_LOG_LEVEL}" == "trace" ]] && HSHA_LOG_LEVEL=debug
 [[ "${HSHA_LOG_LEVEL}" == "warn" ]] && HSHA_LOG_LEVEL=warning
 exec python3 -m hsha.web
