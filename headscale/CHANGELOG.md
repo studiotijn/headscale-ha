@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0
+
+- **Networks tab always visible.** While access control is off it explains what it does and has
+  a button *Enable access control* (sets the option `multi_tenant` and restarts the app).
+- **Access per device.** *Devices → Access* (and every device row under *Networks*) opens one
+  dialog per device:
+  - group membership as on/off buttons;
+  - what it may reach and who may reach it, with *Add access* and *Give access*;
+  - **routing**: the addresses behind that device.
+- **Opening a port sets the routing.** A device behind any VPN device (e.g. a printer or PLC
+  behind the work PC) is added with its IP address. When a connection opens a port to it, the app
+  approves exactly `<ip>/32` as a route on that device, and withdraws it again when the connection
+  is switched off or removed. The rest of the network behind it is never routed.
+  - The dialog shows per address whether the route is advertised and approved, the
+    `tailscale set --advertise-routes=…` command when it is missing, and which connections open it.
+  - Routes the device offers but nothing uses can be turned into an address with one click.
+
 ## 0.8.0
 
 - **Networks tab, easy editing:** every connection, location, device, domain, group and port

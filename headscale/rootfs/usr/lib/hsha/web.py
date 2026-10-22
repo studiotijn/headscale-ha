@@ -491,10 +491,28 @@ class App:
             item["location"] = tenancy.node_location(mt.model, n)
             item["ipv4"] = tenancy.node_ipv4(n)
             view.append(item)
+        by_id = {int(n["id"]): n for n in nodes}
         devices = []
         for d in mt.model["devices"]:
-            loc = tenancy.location(mt.model, d["location"])
-            devices.append({**d, "vpn_ip": str(tenancy.vpn_ip(loc, d["ip"])) if loc else None})
+            item = {**d, "vpn_ip": str(tenancy.device_vpn_ip(mt.model, d))}
+            via = tenancy.via_node_id(d)
+            if via is not None:
+                node = by_id.get(via)
+                route = f"{d['ip']}/32"
+                addr = ipaddress.ip_address(d["ip"])
+
+                def covers(routes, addr=addr):
+                    return any(addr in ipaddress.ip_network(r, strict=False) for r in routes or [])
+
+                item["route"] = {
+                    "route": route,
+                    "node": (node.get("given_name") or node.get("name")) if node else None,
+                    "online": bool(node and node.get("online")),
+                    "advertised": bool(node and covers(node.get("available_routes"))),
+                    "approved": bool(node and covers(node.get("approved_routes"))),
+                    "in_use": tenancy.device_in_use(mt.model, d["id"]),
+                }
+            devices.append(item)
         locations = []
         for loc in mt.model["locations"]:
             edge = tenancy.edge_node(mt.model, loc, nodes)

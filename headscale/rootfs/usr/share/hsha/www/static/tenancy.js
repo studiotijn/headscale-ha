@@ -48,6 +48,21 @@ Object.assign(STRINGS.nl, {
   mt_audit: "Logboek", mt_none_yet: "Nog niets.", mt_route_warn: "Routecontrole",
   mt_disabled: "Multi-tenant staat uit. Zet de app-optie multi_tenant aan (tabblad Configuratie van de app).",
   mt_pending_hint: "Opgeslagen. Druk op Toepassen om het live te zetten.",
+  mt_off_title: "Netwerken en toegangsbeheer",
+  mt_off_intro: "Hier stel je per apparaat, gebruiker en groep in wie met wie mag verbinden en welke poorten openstaan. De app zet daarmee ook de routering: alleen de adressen die je openzet worden doorgerouteerd. Dit staat nu uit; zolang het uit staat geldt het huidige beleid (beheerders mogen alles).",
+  mt_off_steps: "Na inschakelen: de app herstart (± 30 s), je huidige apparaten komen in het domein Privé, en er verandert nog niets aan de toegang tot je op Activeren drukt.",
+  mt_enable: "Toegangsbeheer inschakelen", mt_enabling: "Inschakelen… de app herstart.",
+  mt_via: "Bereikbaar via", mt_via_site: "Locatie (Edgebox)", mt_via_node: "Via een VPN-apparaat (router)",
+  mt_access_btn: "Toegang", mt_node_groups: "Lid van groepen", mt_no_groups: "Nog geen groepen. Maak er een onder Groepen en poorten.",
+  mt_behind: "Apparaten achter dit apparaat (routering)",
+  mt_behind_intro: "Adressen in het netwerk achter dit apparaat. Pas als je er een poort voor openzet, keurt de app precies dat adres (/32) goed als route; de rest van dat netwerk blijft onbereikbaar.",
+  mt_open_port: "Poort openzetten", mt_route_inuse: "route actief", mt_route_unused: "geen verbinding: niet gerouteerd",
+  mt_route_notadv: "wordt nog niet aangeboden. Voer uit op dat apparaat (bestaande routes erbij zetten):",
+  mt_route_pending: "wordt goedgekeurd (binnen 30 s, na Toepassen)",
+  mt_advertised_extra: "Biedt ook aan (niet gerouteerd zolang er geen verbinding is):",
+  mt_give_access: "Toegang geven", mt_add_access: "Toegang toevoegen",
+  mt_devices_all: "Apparaten op locaties en achter routers",
+  mt_add_behind: "Adres achter dit apparaat toevoegen", mt_used_in: "Open via:",
 });
 
 Object.assign(STRINGS.en, {
@@ -96,6 +111,21 @@ Object.assign(STRINGS.en, {
   mt_audit: "Log", mt_none_yet: "Nothing yet.", mt_route_warn: "Route check",
   mt_disabled: "Multi-tenant mode is off. Enable the app option multi_tenant (the app's Configuration tab).",
   mt_pending_hint: "Saved. Press Apply to make it live.",
+  mt_off_title: "Networks and access control",
+  mt_off_intro: "Here you set per device, user and group who may connect to whom and which ports are open. The app also sets the routing from that: only the addresses you open are routed. This is off now; while it is off the current policy applies (admins may reach everything).",
+  mt_off_steps: "After enabling: the app restarts (about 30 s), your current devices go into the Private domain, and nothing changes in access until you press Activate.",
+  mt_enable: "Enable access control", mt_enabling: "Enabling… the app restarts.",
+  mt_via: "Reachable via", mt_via_site: "Location (Edgebox)", mt_via_node: "Through a VPN device (router)",
+  mt_access_btn: "Access", mt_node_groups: "Member of groups", mt_no_groups: "No groups yet. Create one under Groups and ports.",
+  mt_behind: "Devices behind this device (routing)",
+  mt_behind_intro: "Addresses in the network behind this device. Only when you open a port to one does the app approve exactly that address (/32) as a route; the rest of that network stays unreachable.",
+  mt_open_port: "Open a port", mt_route_inuse: "route active", mt_route_unused: "no connection: not routed",
+  mt_route_notadv: "is not advertised yet. Run on that device (include routes it already advertises):",
+  mt_route_pending: "is being approved (within 30 s, after Apply)",
+  mt_advertised_extra: "Also offers (not routed while there is no connection):",
+  mt_give_access: "Give access", mt_add_access: "Add access",
+  mt_devices_all: "Devices at locations and behind routers",
+  mt_add_behind: "Add an address behind this device", mt_used_in: "Open through:",
 });
 
 let mtData = null;
@@ -120,11 +150,17 @@ function refLabel(ref, side = "dst") {
     case "domain": return fmt(side === "src" ? "ref_domain_src" : "ref_domain_dst", { x: (mtDomain(key) || { name: key }).name });
     case "node": { const n = mtNode(key); return n ? n.name : `#${key}`; }
     case "group": return (mtGroup(key) || { name: key }).name;
-    case "dev": { const d = mtDev(key); return d ? `${d.name} · ${(mtLoc(d.location) || {}).name || ""} (${d.vpn_ip})` : ref; }
+    case "dev": { const d = mtDev(key); return d ? `${d.name} · ${devWhere(d)} (${d.vpn_ip})` : ref; }
     case "loc": return fmt("ref_loc", { x: (mtLoc(key) || { name: key }).name });
     case "edge": return fmt("ref_edge", { x: (mtLoc(key) || { name: key }).name });
     default: return ref;
   }
+}
+
+function devWhere(d) {
+  if (d.location) return (mtLoc(d.location) || {}).name || d.location;
+  const n = mtNode(d.via);
+  return `via ${n ? n.name : `#${d.via}`}`;
 }
 
 function portLabel(p) {
@@ -154,6 +190,8 @@ function refOptions(mode) {
     d.users.forEach((u) => opts.push({ value: `user:${u}`, label: `${ICON.user} ${u}` }));
     nodesOf(d).forEach((n) => opts.push({ value: `node:${n.id}`, label: `${ICON.node} ${n.name} (${n.ipv4})` }));
     if (mode !== "src") {
+      mtData.model.devices.filter((x) => x.via && (mtNode(x.via) || {}).domain === d.id).forEach((x) =>
+        opts.push({ value: `dev:${x.id}`, label: `${ICON.dev} ${x.name} · ${devWhere(x)} (${x.ip})` }));
       for (const l of mtData.model.locations.filter((x) => x.domain === d.id)) {
         mtData.model.devices.filter((x) => x.location === l.id).forEach((x) =>
           opts.push({ value: `dev:${x.id}`, label: `${ICON.dev} ${x.name} · ${l.name} (${x.vpn_ip})` }));
@@ -259,10 +297,13 @@ function openDialog(title, body, { onSave, onDelete, saveLabel } = {}) {
   return { setMsg, dlg };
 }
 
+const mtRefreshers = new Set();
+
 async function mtSave(kind, action, data) {
   await api(`tenancy/${kind}/${action}`, { method: "POST", body: data });
   banner(t("mt_pending_hint"), "ok");
-  await loadNetworks();
+  if (current === "networks") await loadNetworks(); else mtData = await api("tenancy");
+  mtRefreshers.forEach((fn) => fn());
 }
 
 // ---------------------------------------------------------------- connection editor
@@ -511,22 +552,110 @@ function editLocation(l) {
   });
 }
 
-function editDevice(d) {
+function editDevice(d, preset = {}) {
   const isNew = !d;
-  const locs = mtData.model.locations.map((l) => ({ value: l.id, label: `${l.name} (${l.local_subnet})` }));
-  const loc = selectEl(locs, d ? d.location : undefined);
-  const name = mtIn({ value: d ? d.name : "", required: "", placeholder: "LiDAR 1" });
-  const ip = mtIn({ value: d ? d.ip : "", required: "", placeholder: "172.168.1.10", pattern: "\\d+\\.\\d+\\.\\d+\\.\\d+" });
-  const noteIn = mtIn({ value: d ? d.note || "" : "" });
+  const cur = { ...(d || {}), ...preset };
+  const where = el("select", {},
+    el("optgroup", { label: t("mt_via_site") }, ...mtData.model.locations.map((l) => el("option", { value: `loc:${l.id}` }, `${l.name} (${l.local_subnet})`))),
+    el("optgroup", { label: t("mt_via_node") }, ...mtData.nodes.filter((n) => !n.location && n.ipv4).map((n) =>
+      el("option", { value: `node:${n.id}` }, `${n.name}${n.domain ? ` · ${(mtDomain(n.domain) || {}).name}` : ""}`))));
+  if (cur.location) where.value = `loc:${cur.location}`; else if (cur.via) where.value = `node:${cur.via}`;
+  const name = mtIn({ value: cur.name || "", required: "", placeholder: "LiDAR 1" });
+  const ip = mtIn({ value: cur.ip || "", required: "", placeholder: "172.168.1.10", pattern: "\\d+\\.\\d+\\.\\d+\\.\\d+" });
+  const noteIn = mtIn({ value: cur.note || "" });
   const vpnOut = el("strong", { class: "mono" });
-  const upd = () => { const l = mtLoc(loc.value); vpnOut.textContent = l && /^\d+\.\d+\.\d+\.\d+$/.test(ip.value) ? vpnFor(l, ip.value) : "–"; };
-  loc.addEventListener("change", upd); ip.addEventListener("input", upd); upd();
+  const upd = () => {
+    const [kind, key] = where.value.split(":");
+    const ok = /^\d+\.\d+\.\d+\.\d+$/.test(ip.value);
+    vpnOut.textContent = !ok ? "–" : kind === "loc" ? vpnFor(mtLoc(key), ip.value) : `${ip.value} (route ${ip.value}/32 via ${(mtNode(key) || {}).name || key})`;
+  };
+  where.addEventListener("change", upd); ip.addEventListener("input", upd); upd();
   openDialog(isNew ? t("mt_devices") : d.name, el("div", { class: "form-grid" },
-    mtField(t("mt_location"), loc), mtField(t("mt_name"), name), mtField(t("mt_local_ip"), ip),
+    mtField(t("mt_via"), where), mtField(t("mt_name"), name), mtField(t("mt_local_ip"), ip),
     el("p", {}, `${t("mt_vpn_ip")}: `, vpnOut), mtField(t("mt_note"), noteIn)), {
-    onSave: () => mtSave("device", isNew ? "create" : "update", { id: d ? d.id : undefined, location: loc.value, name: name.value, ip: ip.value, note: noteIn.value }),
+    onSave: () => {
+      const [kind, key] = where.value.split(":");
+      return mtSave("device", isNew ? "create" : "update", { id: d ? d.id : undefined, location: kind === "loc" ? key : "",
+        via: kind === "node" ? key : "", name: name.value, ip: ip.value, note: noteIn.value });
+    },
     onDelete: isNew ? null : () => mtSave("device", "delete", { id: d.id }),
   });
+}
+
+function devConnections(d) {
+  const ref = `dev:${d.id}`;
+  const used = mtData.model.connections.filter((c) => c.dst.includes(ref)
+    || c.dst.some((r) => r.startsWith("group:") && ((mtGroup(r.slice(6)) || {}).members || []).includes(ref)));
+  if (!used.length) return "";
+  return el("div", { class: "chips" }, el("span", { class: "muted small" }, t("mt_used_in")), ...used.map((c) =>
+    el("button", { type: "button", class: `chip-toggle${c.enabled ? " on" : ""}`, onclick: (e) => { e.stopPropagation(); editConnection(c); } },
+      `${c.name || c.id}: ${c.src.map((r) => refLabel(r, "src")).join(", ")} · ${c.ports.map(portLabel).join(", ")}`)));
+}
+
+function routeStatus(d) {
+  if (!d.route) return "";
+  const r = d.route;
+  if (!r.in_use) return el("div", { class: "small muted" }, t("mt_route_unused"));
+  if (!r.advertised) return el("div", { class: "small warn-text" }, `${r.route} ${t("mt_route_notadv")}`, copyable(`tailscale set --advertise-routes=${r.route}`));
+  if (!r.approved) return el("div", { class: "small warn-text" }, `${r.route} ${t("mt_route_pending")}`);
+  return el("div", { class: "small ok-text" }, `${r.route} · ${t("mt_route_inuse")}`);
+}
+
+// ---------------------------------------------------------------- one device: groups, access, routing
+async function openNodeAccess(nodeId) {
+  if (!mtData) mtData = await api("tenancy");
+  const body = el("div", { class: "form-grid" });
+  const render = async () => {
+    const n = mtNode(nodeId);
+    if (!n) { body.replaceChildren(el("p", { class: "muted" }, t("mt_nothing"))); return; }
+    const ref = `node:${n.id}`;
+    const acc = await api(`tenancy/access?ref=${encodeURIComponent(ref)}`);
+    const conns = Object.fromEntries(mtData.model.connections.map((c) => [c.id, c]));
+    const info = el("p", { class: "muted" }, [n.domain ? (mtDomain(n.domain) || {}).name : t("mt_unassigned"),
+      n.ipv4, n.online ? t("online") : t("offline"), n.tags.join(", ") || n.user].filter(Boolean).join(" · "));
+    // groups
+    const groups = (mtData.model.groups || []);
+    const gbox = el("div", { class: "chips" }, ...(groups.length ? groups.map((g) => {
+      const member = g.members.includes(ref);
+      return el("button", { type: "button", class: `chip-toggle${member ? " on" : ""}`, onclick: () => mtSave("group", "update", {
+        ...g, members: member ? g.members.filter((m) => m !== ref) : [...g.members, ref] }).catch((e) => banner(e.message)) }, `${ICON.group} ${g.name}`);
+    }) : [el("span", { class: "muted small" }, t("mt_no_groups"))]));
+    const rows = (items, side) => (items.length ? items.map((x) => el("div", { class: `conn${x.enabled ? "" : " off"}`, onclick: () => editConnection(conns[x.id]) },
+      el("div", { class: "conn-head" }, el("strong", {}, x.name || x.id), x.via.filter((v) => v !== ref).length ? el("span", { class: "muted small" }, `(${x.via.filter((v) => v !== ref).map((v) => refLabel(v, side === "dst" ? "src" : "dst")).join(", ")})`) : ""),
+      el("div", { class: "chips" }, x.refs.map((r2) => refChip(r2, side)), ...portChips(x.ports))))
+      : [el("p", { class: "muted small" }, t("mt_nothing"))]);
+    const canSource = !n.location;
+    // routing: devices behind this node
+    const behind = mtData.model.devices.filter((d) => String(d.via) === String(n.id));
+    const known = new Set(behind.map((d) => `${d.ip}/32`));
+    const extra = (n.available_routes || []).filter((r) => !known.has(r) && r !== "0.0.0.0/0" && r !== "::/0");
+    const routing = n.location ? "" : el("div", {},
+      el("h3", {}, t("mt_behind")), el("p", { class: "muted small" }, t("mt_behind_intro")),
+      ...behind.map((d) => el("div", { class: "conn", onclick: () => editDevice(d) },
+        el("div", { class: "conn-head" }, el("strong", {}, `${ICON.dev} ${d.name}`), el("span", { class: "mono small" }, d.ip), el("span", { class: "grow" }),
+          el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); editConnection(null, { dst: [`dev:${d.id}`] }); } }, t("mt_open_port"))),
+        devConnections(d), routeStatus(d))),
+      extra.length ? note("info", el("p", { class: "small" }, t("mt_advertised_extra")), el("div", { class: "chips" }, extra.map((r) =>
+        el("button", { type: "button", class: "chip-toggle", title: t("mt_new"), onclick: () => {
+          const ipOnly = r.endsWith("/32") ? r.slice(0, -3) : "";
+          editDevice(null, { via: String(n.id), ip: ipOnly, name: "" });
+        } }, `+ ${r}`)))) : "",
+      el("button", { class: "btn secondary small", type: "button", onclick: () => editDevice(null, { via: String(n.id) }) }, `+ ${t("mt_add_behind")}`));
+    body.replaceChildren(info,
+      el("h3", {}, t("mt_node_groups")), gbox,
+      el("div", { class: "two-col" },
+        el("div", {}, el("h3", {}, t("mt_out")), ...rows(acc.outgoing, "dst"),
+          canSource ? el("button", { class: "btn secondary small", type: "button", onclick: () => editConnection(null, { src: [ref] }) }, `+ ${t("mt_add_access")}`) : ""),
+        el("div", {}, el("h3", {}, t("mt_in")), ...rows(acc.incoming, "src"),
+          el("button", { class: "btn secondary small", type: "button", onclick: () => editConnection(null, { dst: [n.location ? `edge:${n.location}` : ref] }) }, `+ ${t("mt_give_access")}`))),
+      acc.internal.length ? note("info", el("p", { class: "small" }, fmt("mt_internal_note", { x: acc.internal.map((d) => (mtDomain(d) || { name: d }).name).join(", ") }))) : "",
+      routing);
+  };
+  const refresh = () => render().catch((e) => banner(e.message));
+  const ui = openDialog((mtNode(nodeId) || { name: `#${nodeId}` }).name, body, { saveLabel: "OK" });
+  mtRefreshers.add(refresh);
+  ui.dlg.addEventListener("close", () => mtRefreshers.delete(refresh));
+  await render();
 }
 
 function mtSitesView() {
@@ -556,11 +685,14 @@ function mtSitesView() {
           el("a", { class: "btn secondary small", href: `api/tenancy/locations/${l.id}/nftables`, target: "_blank", rel: "noopener" }, t("mt_nft"))));
     })), out);
   const devCard = el("article", { class: "card" },
-    el("div", { class: "card-head" }, el("h2", {}, t("mt_devices")),
-      mtData.model.locations.length ? el("button", { class: "btn", type: "button", onclick: () => editDevice(null) }, `+ ${t("mt_new")}`) : ""),
-    mtTable([t("mt_location"), t("mt_name"), t("mt_local_ip"), t("mt_vpn_ip"), ""], mtData.model.devices.map((d) => el("tr", { class: "clickable", onclick: () => editDevice(d) },
-      el("td", {}, (mtLoc(d.location) || {}).name || d.location), el("td", {}, d.name), el("td", { class: "mono" }, d.ip),
-      el("td", { class: "mono" }, d.vpn_ip), el("td", { class: "actions" }, editBtn((e) => { e.stopPropagation(); editDevice(d); }))))));
+    el("div", { class: "card-head" }, el("h2", {}, t("mt_devices_all")),
+      el("button", { class: "btn", type: "button", onclick: () => editDevice(null) }, `+ ${t("mt_new")}`)),
+    el("p", { class: "muted small" }, t("mt_behind_intro")),
+    mtTable([t("mt_via"), t("mt_name"), t("mt_local_ip"), t("mt_vpn_ip"), ""], mtData.model.devices.map((d) => el("tr", { class: "clickable", onclick: () => editDevice(d) },
+      el("td", {}, devWhere(d)), el("td", {}, d.name), el("td", { class: "mono" }, d.ip),
+      el("td", { class: "mono" }, d.vpn_ip, routeStatus(d)),
+      el("td", { class: "actions" }, el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); editConnection(null, { dst: [`dev:${d.id}`] }); } }, t("mt_open_port")),
+        editBtn((e) => { e.stopPropagation(); editDevice(d); }))))));
   return [locCard, devCard];
 }
 
@@ -614,12 +746,13 @@ function mtDomainsView() {
     } catch (err) { banner(err.message); } finally { busy(regBtn, false); }
   });
   const nodeCard = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
-    mtTable([t("name"), t("mt_domain"), "IP", t("status"), t("routes")], mtData.nodes.map((n) => el("tr", {},
+    mtTable([t("name"), t("mt_domain"), "IP", t("status"), t("routes"), ""], mtData.nodes.map((n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
       el("td", {}, el("strong", {}, n.name), el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))),
       el("td", {}, n.domain ? (mtDomain(n.domain) || {}).name + (n.location ? ` · ${(mtLoc(n.location) || {}).name}` : "") : el("span", { class: "warn-text" }, t("mt_unassigned"))),
       el("td", { class: "mono" }, n.ipv4 || ""),
       el("td", {}, el("span", { class: `pill ${n.online ? "ok" : ""}` }, n.online ? t("online") : t("offline"))),
-      el("td", { class: "mono" }, n.approved_routes.join("\n"))))),
+      el("td", { class: "mono" }, n.approved_routes.join("\n")),
+      el("td", { class: "actions" }, el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); openNodeAccess(n.id); } }, t("mt_access_btn")))))),
     el("h3", {}, t("mt_add_device")),
     el("div", { class: "row" }, mtField(t("mt_user"), who), mtField(t("valid_for"), hours), keyBtn), out,
     el("div", { class: "row" }, mtField(t("mt_user"), who.cloneNode(true)), mtField(t("register_label"), authId), regBtn));
@@ -646,10 +779,10 @@ const MT_VIEWS = {
 
 async function loadNetworks() {
   const root = $("#networks");
-  try { mtData = await api("tenancy"); } catch (err) {
-    root.replaceChildren(note("info", el("p", {}, t("mt_disabled"))));
-    throw err;
-  }
+  let status = null;
+  try { status = await api("status"); } catch { /* shown below */ }
+  if (status && !status.multi_tenant) { root.replaceChildren(mtOffCard()); return; }
+  mtData = await api("tenancy");
   if (!MT_VIEWS[mtSub]) mtSub = "connections";
   const subnav = el("div", { class: "subnav", role: "tablist" }, ...Object.keys(MT_VIEWS).map((k) => el("button", {
     type: "button", role: "tab", "aria-selected": String(k === mtSub),
@@ -658,5 +791,21 @@ async function loadNetworks() {
   root.replaceChildren(mtStatusCard(), subnav, ...(await MT_VIEWS[mtSub]()));
 }
 
+function mtOffCard() {
+  const btn = el("button", { class: "btn", type: "button" }, t("mt_enable"));
+  btn.addEventListener("click", async () => {
+    busy(btn, true);
+    try {
+      await api("wizard/options", { method: "POST", body: { changes: { multi_tenant: true } } });
+      $("#overlay-text").textContent = t("mt_enabling");
+      $("#overlay").hidden = false;
+      waitForRestartGeneric(180000);
+    } catch (err) { banner(err.message); busy(btn, false); }
+  });
+  return el("article", { class: "card" }, el("h2", {}, t("mt_off_title")), el("p", {}, t("mt_off_intro")),
+    el("p", { class: "muted" }, t("mt_off_steps")), el("div", { class: "actions" }, btn));
+}
+
 loaders.networks = loadNetworks;
-api("status").then((s) => { if (s.multi_tenant) $("#tab-btn-networks").hidden = false; }).catch(() => {});
+let mtOn = false;
+api("status").then((s) => { mtOn = Boolean(s.multi_tenant); }).catch(() => {});

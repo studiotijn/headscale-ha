@@ -265,6 +265,7 @@ async function loadNodes() {
     const pending = n.available_routes.filter((r) => !n.approved_routes.includes(r));
     const actions = el("td", { class: "actions" });
     if (pending.length) actions.append(el("button", { class: "btn small", onclick: () => nodeAction(n.id, "approve") }, t("approve_routes")));
+    if (typeof mtOn !== "undefined" && mtOn) actions.append(el("button", { class: "btn small", onclick: () => openNodeAccess(n.id) }, t("mt_access_btn")));
     actions.append(
       el("button", { class: "btn secondary small", onclick: () => nodeAction(n.id, "expire") }, t("expire")),
       el("button", { class: "btn danger small", onclick: () => confirm(t("confirm_delete")) && nodeAction(n.id, "delete") }, t("delete")),

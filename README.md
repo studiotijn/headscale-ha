@@ -82,7 +82,7 @@ what to fix.
 
 With the option `multi_tenant` one Headscale manages several **separated network domains**, for
 example *Private*, *Work* and clients with several sites. Domains cannot reach each other; only
-connections you create are allowed. You set this up in the *Networks* tab:
+connections you create are allowed. Turn it on in the *Networks* tab (*Enable access control*), then:
 
 - **Connections editor.** Pick *From*, *To* and *Ports* with buttons and chips: users, devices,
   whole domains or groups, to devices, sites, Edgeboxes or groups. Edit any connection in place,
@@ -91,6 +91,11 @@ connections you create are allowed. You set this up in the *Networks* tab:
 - **Groups.** Group to group in one connection.
 - **Port profiles.** SSH, Web, RDP, VNC, Modbus, OPC UA, MQTT and Ping are ready to use, and
   you can make your own. Change a profile and every connection that uses it follows.
+- **Access per device.** *Devices → Access* shows its groups (on/off), what it may reach and who
+  may reach it.
+- **Opening a port sets the routing.** Add an address behind any VPN device (a printer or PLC
+  behind the work PC). The app routes exactly that address (`/32`) only while a connection opens a
+  port to it, so the rest of that network stays unreachable.
 - **Who can reach what?** Pick a user, device, group or site and see what it may reach and who may
   reach it, with a direct *Edit* link.
 - **Client sites with an Edgebox.**

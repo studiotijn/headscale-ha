@@ -122,8 +122,7 @@ def generate(model: dict, ctx: Context) -> dict:
     for loc in model["locations"]:
         hosts[_loc_alias(loc)] = str(ipaddress.ip_network(loc["vpn_subnet"]))
     for dev in model["devices"]:
-        loc = tn.location(model, dev["location"])
-        hosts[_dev_alias(dev)] = f"{tn.vpn_ip(loc, dev['ip'])}/32"
+        hosts[_dev_alias(dev)] = f"{tn.device_vpn_ip(model, dev)}/32"
     used_nodes: set[int] = set()
 
     def node_ref(node_id: int) -> str | None:
@@ -284,7 +283,7 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
             alias = node_ref(int(edge["id"]))
             if alias:
                 pts.append(alias)
-        devs = [d for d in model["devices"] if d["location"] == loc["id"]]
+        devs = [d for d in model["devices"] if d.get("location") == loc["id"]]
         pts += [_dev_alias(d) for d in devs[:2]]
         loc_points[loc["id"]] = pts
 
@@ -347,7 +346,7 @@ def _test_hosts(model: dict, ctx: Context, ref: str, reps: dict, node_ref) -> li
         dev = tn.device(model, key)
         return [_dev_alias(dev)] if dev else []
     if kind == "loc":
-        return [_dev_alias(d) for d in model["devices"] if d["location"] == key][:1]
+        return [_dev_alias(d) for d in model["devices"] if d.get("location") == key][:1]
     if kind == "edge":
         loc = tn.location(model, key)
         edge = tn.edge_node(model, loc, ctx.nodes) if loc else None
@@ -411,7 +410,7 @@ def edge_nftables(model: dict, loc_id: str, ctx: Context, sha: str | None = None
             kind, _, key = ref.partition(":")
             if kind == "dev":
                 dev = tn.device(model, key)
-                if dev and dev["location"] == loc_id and dev["ip"] not in daddrs:
+                if dev and dev.get("location") == loc_id and dev["ip"] not in daddrs:
                     daddrs.append(dev["ip"])
             elif kind == "loc" and key == loc_id and str(local) not in daddrs:
                 daddrs.append(str(local))

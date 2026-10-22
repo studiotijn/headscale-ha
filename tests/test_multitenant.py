@@ -368,3 +368,72 @@ def test_old_connections_are_migrated(tmp_path, monkeypatch):
     loaded = tn.load("tijn")
     assert all(isinstance(c["src"], list) for c in loaded["connections"])
     assert tn.profile(loaded, "ssh")["ports"] == ["tcp:22"]
+
+
+def test_device_behind_a_router_gets_only_its_route():
+    m = build()
+    m, _ = tn.apply_change(
+        m, "device", "create", {"id": "prn", "via": "node:4", "name": "Printer werk", "ip": "10.20.0.5"}
+    )
+    tn.validate(m, NODES)
+    werk = NODES[3]
+    assert tn.allowed_routes(m, werk, []) == []  # not used by any connection yet: no route
+    m, _ = tn.apply_change(
+        m, "connection", "create", {"id": "p", "src": "node:1", "dst": "dev:prn", "ports": "tcp:631"}
+    )
+    assert tn.allowed_routes(m, werk, []) == ["10.20.0.5/32"]
+    assert tn.ref_domains(m, "dev:prn", {n["id"]: n for n in NODES}) == {"dynteq"}
+    r = pg.generate(m, ctx())
+    assert r["policy"]["hosts"]["dev-prn"] == "10.20.0.5/32"
+    g = next(x for x in r["policy"]["grants"] if x["src"] == ["node-1"] and x["dst"] == ["dev-prn"])
+    assert g["ip"] == ["tcp:631"]
+    # switching the connection off withdraws the route again
+    m, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "p"), "enabled": False})
+    assert tn.allowed_routes(m, werk, []) == []
+    # a client user can never reach it (other domain)
+    bad, _ = tn.apply_change(m, "connection", "create", {"src": "user:srs-jan", "dst": "dev:prn", "ports": "*"})
+    with pytest.raises(tn.ModelError, match="client domain"):
+        tn.validate(bad, NODES)
+    # not behind an Edgebox, not a tailnet address, not both location and router
+    for data, msg in (
+        ({"via": "node:6", "ip": "10.1.1.1"}, "Edgebox"),
+        ({"via": "node:4", "ip": "100.64.0.9"}, "tailnet address"),
+        ({"via": "node:4", "ip": "10.81.1.50"}, "VPN subnet"),
+    ):
+        bad, _ = tn.apply_change(m, "device", "create", {"name": "x", **data})
+        with pytest.raises(tn.ModelError, match=msg):
+            tn.validate(bad, NODES)
+
+
+def test_device_routes_are_approved_and_withdrawn(tmp_path, monkeypatch):
+    import asyncio
+    import types
+
+    from hsha import hs, multitenant, paths
+
+    monkeypatch.setattr(paths, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "AUDIT", tmp_path / "audit.jsonl")
+    monkeypatch.setattr(paths, "TENANCY", tmp_path / "t.json")
+    werk = {**NODES[3], "approved_routes": ["192.168.50.0/24"]}  # a route the user approved himself
+    calls = []
+
+    async def fake_approve(node_id, routes):
+        calls.append((node_id, routes))
+        werk["approved_routes"] = routes
+
+    monkeypatch.setattr(hs, "approve_routes", fake_approve)
+    opts = types.SimpleNamespace(admin_user="tijn", subnet_router=False, exit_node=False)
+    manager = types.SimpleNamespace(opts=opts, state={}, desired_routes=lambda: [])
+    mt = multitenant.MultiTenant(manager)
+    m = build()
+    m, _ = tn.apply_change(m, "device", "create", {"id": "prn", "via": "node:4", "name": "P", "ip": "10.20.0.5"})
+    m, _ = tn.apply_change(
+        m, "connection", "create", {"id": "p", "src": "node:1", "dst": "dev:prn", "ports": "tcp:631"}
+    )
+    mt.model = m
+    asyncio.run(mt._sync_device_routes([werk]))
+    assert calls[-1] == (4, ["10.20.0.5/32", "192.168.50.0/24"])
+    mt.model, _ = tn.apply_change(m, "connection", "delete", {"id": "p"})
+    asyncio.run(mt._sync_device_routes([werk]))
+    assert calls[-1] == (4, ["192.168.50.0/24"])  # only our /32 is withdrawn
+    assert manager.state["mt_routes"] == {}

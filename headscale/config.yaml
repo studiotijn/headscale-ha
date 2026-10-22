@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Headscale
-version: "0.8.0"
+version: "0.9.0"
 slug: headscale
 description: >-
   Self-hosted Tailscale control server (Headscale) with DERP relay, subnet router,

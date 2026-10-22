@@ -150,7 +150,7 @@ device and its ports to every user of your tailnet. Admins always have access.
 
 ## Multi-tenant networks (optional)
 
-With the option `multi_tenant` one Headscale manages several **separated network domains**,
+With the option `multi_tenant` (or *Networks → Enable access control*) one Headscale manages several **separated network domains**,
 for example *Private* (home), *Dynteq* (work) and a client such as *SRS/SHP* with several sites.
 Off by default; with the option off nothing below changes.
 
@@ -173,6 +173,12 @@ Off by default; with the option off nothing below changes.
   connection). A group with site devices can only be a destination. Port profiles are named port
   sets; changing one changes every connection that uses it.
 - **Who can reach what?** Pick anything and see its outgoing and incoming access per connection.
+- **Access per device.** *Devices → Access* opens one dialog per device: its groups (on/off), what it
+  may reach, who may reach it, and the addresses behind it.
+- **Routing follows the open ports.** Add an address behind any VPN device (e.g. a printer behind the
+  work PC). When a connection opens a port to it, the app approves exactly `<ip>/32` as a route on
+  that device and withdraws it when the connection goes. The device itself must advertise the
+  route (`tailscale set --advertise-routes=<ip>/32`; the dialog shows the command).
 - **Apply.** Changes are pending until you press *Apply* (the first time: *Activate*; the hand-made
   policy is kept in `/data/hsha/policy-history/`). The app generates the whole ACL policy,
   including a `tests` block with the isolation rules; Headscale refuses a policy whose tests fail.

@@ -158,6 +158,33 @@ def vpn_ip(loc: dict, local_ip: str) -> ipaddress.IPv4Address:
     return vpn.network_address + (int(ip) - int(local.network_address))
 
 
+def device_vpn_ip(model: dict, dev: dict) -> ipaddress.IPv4Address:
+    """Address a device has over the VPN: mapped at a site, unchanged behind another router."""
+    if dev.get("location"):
+        loc = location(model, dev["location"])
+        if loc is None:
+            raise ModelError(f"Device {dev['name']}: unknown location")
+        return vpn_ip(loc, dev["ip"])
+    return ipaddress.ip_address(dev["ip"])
+
+
+def via_node_id(dev: dict) -> int | None:
+    via = str(dev.get("via") or "")
+    return int(via) if via.isdigit() else None
+
+
+def device_in_use(model: dict, dev_id: str) -> bool:
+    ref = f"dev:{dev_id}"
+    return any(c.get("enabled", True) and ref in expand_refs(model, c["dst"]) for c in model["connections"])
+
+
+def device_routes(model: dict, node_id: int) -> list[str]:
+    """Routes the app approves on a node for devices behind it that a connection uses (one /32 each)."""
+    return sorted(
+        {f"{d['ip']}/32" for d in model["devices"] if via_node_id(d) == int(node_id) and device_in_use(model, d["id"])}
+    )
+
+
 def suggest_vpn_subnet(model: dict, number: int, local_subnet: str, base: str = "10.81") -> str:
     """10.81.<number>.0/24 for a /24 site (the host part stays equal to the local one)."""
     local = ipaddress.ip_network(local_subnet, strict=False)
@@ -239,6 +266,7 @@ def allowed_routes(model: dict, node: dict, home_routes: list[str]) -> list[str]
     for loc in model["locations"]:
         if edge_tag(loc) in tags:
             out.append(str(ipaddress.ip_network(loc["vpn_subnet"])))
+    out += device_routes(model, int(node["id"]))
     return sorted(set(out))
 
 
@@ -346,7 +374,9 @@ def ref_domains(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> set[str]
         return {d} if d else set()
     if kind == "dev":
         dev = device(model, key)
-        loc = location(model, dev["location"]) if dev else None
+        if dev and via_node_id(dev) is not None:
+            return ref_domains(model, f"node:{via_node_id(dev)}", nodes_by_id)
+        loc = location(model, dev["location"]) if dev and dev.get("location") else None
         return {loc["domain"]} if loc else set()
     if kind in ("loc", "edge"):
         loc = location(model, key)
@@ -447,14 +477,28 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
         if not IFACE_RE.match(loc.get("lan_iface") or ""):
             raise ModelError(f"Location {loc['name']}: invalid LAN interface name")
 
+    site_nets = [ipaddress.ip_network(loc["vpn_subnet"]) for loc in model["locations"]]
     for dev in model["devices"]:
-        loc = location(model, dev["location"])
-        if loc is None:
-            raise ModelError(f"Device {dev['name']}: unknown location")
-        vpn_ip(loc, dev["ip"])  # raises when outside the local subnet
+        if bool(dev.get("location")) == (via_node_id(dev) is not None):
+            raise ModelError(f"Device {dev['name']}: choose either a location or the device it is reached through")
+        if dev.get("location"):
+            if location(model, dev["location"]) is None:
+                raise ModelError(f"Device {dev['name']}: unknown location")
+            vpn_ip(location(model, dev["location"]), dev["ip"])  # raises when outside the local subnet
+            continue
+        ip = ipaddress.ip_address(dev["ip"])
+        if ip in TAILNET_V4:
+            raise ModelError(f"Device {dev['name']}: {ip} is a tailnet address; choose the device itself instead")
+        if any(ip in n for n in site_nets):
+            raise ModelError(f"Device {dev['name']}: {ip} is inside a location's VPN subnet; add it to that location")
+        node = nodes_by_id.get(via_node_id(dev)) if nodes_by_id else None
+        if nodes_by_id and node is None:
+            warnings.append(f"Device {dev['name']}: the device it is reached through no longer exists")
+        elif node is not None and node_location(model, node):
+            raise ModelError(f"Device {dev['name']}: behind an Edgebox, add it to that location instead")
     seen = set()
     for dev in model["devices"]:
-        key = (dev["location"], dev["ip"])
+        key = (dev.get("location") or f"via{dev.get('via')}", dev["ip"])
         if key in seen:
             raise ModelError(f"Two devices with IP {dev['ip']} in the same location")
         seen.add(key)
@@ -548,7 +592,7 @@ def _covering(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> set[str]:
             out.add(f"domain:{d}")
     if kind == "dev":
         dev = device(model, key)
-        if dev:
+        if dev and dev.get("location"):
             out.add(f"loc:{dev['location']}")
     for g in model.get("groups", []):
         if out & set(g.get("members", [])):
@@ -673,8 +717,8 @@ def _cascade_delete(m: dict, kind: str, key: str, old: dict) -> None:
     if kind == "domain":
         _drop_refs(m, {f"domain:{key}"} | {f"user:{u}" for u in old.get("users", [])})
     if kind == "location":
-        devs = [d for d in m["devices"] if d["location"] == key]
-        m["devices"] = [d for d in m["devices"] if d["location"] != key]
+        devs = [d for d in m["devices"] if d.get("location") == key]
+        m["devices"] = [d for d in m["devices"] if d.get("location") != key]
         _drop_refs(m, {f"loc:{key}", f"edge:{key}"} | {f"dev:{d['id']}" for d in devs})
     if kind == "device":
         _drop_refs(m, {f"dev:{key}"})
@@ -725,9 +769,12 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
             "note": _text(data, "note", "", 200),
         }
     if kind == "device":
+        via = _text(data, "via").removeprefix("node:")
+        loc = "" if via else _text(data, "location")
         return {
             "id": _text(data, "id") or new_id("d"),
-            "location": _text(data, "location"),
+            "location": loc,
+            "via": via,
             "name": _text(data, "name") or _text(data, "ip"),
             "ip": str(ipaddress.IPv4Address(_text(data, "ip"))),
             "note": _text(data, "note", "", 200),

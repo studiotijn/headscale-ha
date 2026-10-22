@@ -14,6 +14,7 @@ import logging
 import time
 
 from . import audit, hs, policygen, tenancy
+from .store import save_state
 from .tenancy import ModelError
 
 log = logging.getLogger("hsha.multitenant")
@@ -154,7 +155,52 @@ class MultiTenant:
             live = await hs.get_policy() or ""
             self.drift = policygen.HEADER.splitlines()[0] not in live or (applied.get("sha256", "")[:16] not in live)
 
+    async def _sync_device_routes(self, nodes: list[dict]) -> None:
+        """Approve exactly <ip>/32 for devices behind a router that a connection uses; withdraw the rest.
+
+        Opening a port to such a device is what makes its route appear; nothing else of the
+        network behind that router becomes reachable.
+        """
+        managed: dict[str, list[str]] = self.manager.state.setdefault("mt_routes", {})
+        changed = False
+        for n in nodes:
+            nid = str(n["id"])
+            if tenancy.node_location(self.model, n):
+                continue  # Edgeboxes: their location subnet, handled below
+            wanted = set(tenancy.device_routes(self.model, int(n["id"])))
+            before = set(managed.get(nid, []))
+            approved = set(n.get("approved_routes") or [])
+            target = (approved - (before - wanted)) | wanted
+            if target != approved:
+                await hs.approve_routes(int(n["id"]), sorted(target))
+                name = n.get("given_name") or n.get("name")
+                added, removed = sorted(target - approved), sorted(approved - target)
+                audit.record(
+                    "routes",
+                    None,
+                    f"{name}: "
+                    + "; ".join(
+                        x
+                        for x in (
+                            f"approved {', '.join(added)}" if added else "",
+                            f"withdrew {', '.join(removed)}" if removed else "",
+                        )
+                        if x
+                    ),
+                )
+                log.info("Routes on %s: +%s -%s", name, added, removed)
+                n["approved_routes"] = sorted(target)
+            if sorted(wanted) != managed.get(nid, []):
+                if wanted:
+                    managed[nid] = sorted(wanted)
+                else:
+                    managed.pop(nid, None)
+                changed = True
+        if changed:
+            save_state(self.manager.state)
+
     async def _check_routes(self, nodes: list[dict]) -> None:
+        await self._sync_device_routes(nodes)
         warnings = []
         remote = self.manager.state.get("remote_routes", {})
         for n in nodes:

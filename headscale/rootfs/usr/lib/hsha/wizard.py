@@ -37,6 +37,7 @@ EDITABLE = {
     "headplane": bool,
     "airprint_dns": bool,
     "dns_via_home": bool,
+    "multi_tenant": bool,
 }
 # Answers / confirmations the user can give.
 ANSWERS = {
