@@ -35,6 +35,8 @@ EDITABLE = {
     "derp_enabled": bool,
     "tailscale_derp_fallback": bool,
     "headplane": bool,
+    "airprint_dns": bool,
+    "dns_via_home": bool,
 }
 # Answers / confirmations the user can give.
 ANSWERS = {
@@ -44,7 +46,7 @@ ANSWERS = {
     "proxy_ok": {True, False},
     "close8123_done": {True, False},
 }
-OPTIONAL_STEPS = {"headplane", "printers", "close8123"}
+OPTIONAL_STEPS = {"headplane", "printers", "airprint", "close8123"}
 STEP_ORDER = [
     "certificate",
     "address",
@@ -55,6 +57,7 @@ STEP_ORDER = [
     "device",
     "headplane",
     "printers",
+    "airprint",
     "close8123",
 ]
 
@@ -318,6 +321,34 @@ class Wizard:
             "issues": [],
             "data": {"count": len(self.app.manager.state["printers"])},
         }
+        dns_rt = runtime.get("printer_dns") or {}
+        dns_test = self.wstate.get("dns_test")
+        ipp_printers = [p for p in self.app.manager.state["printers"] if p.get("protocol") in ("ipp", "ipps")]
+        issues = []
+        if not o.airprint_dns:
+            status = "todo"
+        elif not self.app.manager.state.get("router_ipv4"):
+            status, issues = "warn", ["airprint_no_router"]
+        elif dns_test and dns_test.get("ok"):
+            status = "ok"
+        elif dns_test:
+            status, issues = "fail", ["airprint_test_failed"]
+        else:
+            status = "todo"
+        steps["airprint"] = {
+            "status": status,
+            "issues": issues,
+            "data": {
+                "enabled": o.airprint_dns,
+                "dns_via_home": o.dns_via_home,
+                "domain": o.printer_domain,
+                "mode": dns_rt.get("mode"),
+                "port": dns_rt.get("port"),
+                "router_ip": self.app.manager.state.get("router_ipv4"),
+                "printers": len(ipp_printers),
+                "test": dns_test,
+            },
+        }
         steps["close8123"] = {
             "status": "ok" if answers.get("close8123_done") else "todo",
             "issues": [],
@@ -378,6 +409,25 @@ class Wizard:
         result["server_url"] = o.server_url_clean
         result["time"] = int(time.time())
         self.wstate["external_test"] = result
+        save_state(self.app.manager.state)
+        return result
+
+    async def dns_test(self) -> dict:
+        """Query 127.0.0.1:53 like a tailnet device does (the router forwards port 53 there)."""
+        from . import dnssd
+
+        d = self.opts.printer_domain
+        browse = await asyncio.to_thread(dnssd.lookup, f"b._dns-sd._udp.{d}", "PTR")
+        printers = await asyncio.to_thread(dnssd.lookup, f"_ipp._tcp.{d}", "PTR")
+        normal = await asyncio.to_thread(dnssd.lookup, "www.home-assistant.io", "A")
+        result = {
+            "ok": bool(browse.get("ok")),
+            "browse": browse,
+            "printers": printers,
+            "normal_dns": normal,
+            "time": int(time.time()),
+        }
+        self.wstate["dns_test"] = result
         save_state(self.app.manager.state)
         return result
 

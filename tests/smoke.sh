@@ -47,6 +47,9 @@ cat > "${DATA}/options.json" <<JSON
   "userspace_networking": true,
   "headplane": true,
   "headplane_port": 13000,
+  "airprint_dns": true,
+  "dns_via_home": false,
+  "printer_domain": "printers.home.arpa",
   "log_level": "info"
 }
 JSON
@@ -87,6 +90,19 @@ wait_for "admin user created" 60 bash -c "docker exec ${NAME} headscale -c /data
 wait_for "ACL policy installed" 60 bash -c "docker exec ${NAME} headscale -c /data/headscale/config.yaml policy get | grep -q homerouter"
 wait_for "subnet router online with approved routes" 120 router_approved
 wait_for "headplane responds" 90 curl -fsS -o /dev/null http://127.0.0.1:13000/admin/login
+
+airprint_dns_answers() {
+    docker exec "${NAME}" python3 -c '
+import sys
+from hsha import dnssd
+r = dnssd.lookup("b._dns-sd._udp.printers.home.arpa", "PTR", "127.0.0.1", 53)
+sys.exit(0 if r.get("ok") else 1)'
+}
+split_dns_pushed() {
+    docker exec "${NAME}" grep -q "printers.home.arpa" /data/headscale/config.yaml
+}
+wait_for "printer DNS answers DNS-SD on 127.0.0.1:53" 60 airprint_dns_answers
+wait_for "split DNS for the printer domain pushed to devices" 90 split_dns_pushed
 
 code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18099/api/status)
 if [[ "${code}" != "403" ]]; then

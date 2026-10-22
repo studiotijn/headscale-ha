@@ -208,3 +208,46 @@ def test_probe_summary_elsewhere():
     assert [u["status"] for u in r["udp"]] == ["ok", "not_seen"]
     t.hits.add("tcp", 443, "185.9.9.9")
     assert t._summarise([3478])["tcp"]["status"] == "ok"
+
+
+def test_dnssd_zone():
+    from dnslib import QTYPE, RCODE, DNSRecord
+    from hsha.dnssd import Zone
+
+    printers = [
+        {
+            "name": "Kantoor HP",
+            "slug": "kantoor-hp",
+            "ip": "192.168.6.50",
+            "port": 631,
+            "protocol": "ipp",
+            "resource": "ipp/print",
+            "model": "HP M15",
+            "txt": {"URF": "W8,RS600"},
+        },
+        {"name": "Zolder", "slug": "zolder", "ip": "10.9.9.9", "port": 9100, "protocol": "raw"},
+    ]
+    z = Zone("printers.home.arpa").build(printers)
+
+    def ask(name, qtype):
+        return z.answer(DNSRecord.question(name, qtype))
+
+    assert [str(r.rdata) for r in ask("b._dns-sd._udp.printers.home.arpa", "PTR").rr] == ["printers.home.arpa."]
+    ptr = ask("_universal._sub._ipp._tcp.PRINTERS.home.arpa", "PTR")
+    assert len(ptr.rr) == 1 and "Kantoor" in str(ptr.rr[0].rdata)
+    assert {r.rtype for r in ptr.ar} == {QTYPE.SRV, QTYPE.TXT, QTYPE.A}  # extras for one round trip
+    txt = ask("Kantoor HP._ipp._tcp.printers.home.arpa", "TXT").rr[0]
+    assert b"URF=W8,RS600" in txt.rdata.data and b"pdl=application/pdf,image/urf,image/jpeg" in txt.rdata.data
+    assert str(ask("kantoor-hp.printers.home.arpa", "A").rr[0].rdata) == "192.168.6.50"
+    assert ask("zolder.printers.home.arpa", "A").header.rcode == RCODE.NXDOMAIN  # raw printers: no AirPrint
+    assert z.inside(DNSRecord.question("x.printers.home.arpa").q.qname)
+    assert not z.inside(DNSRecord.question("printers.home.arpa.evil.com").q.qname)
+
+
+def test_dns_nameservers():
+    from hsha.render import dns_nameservers
+
+    o = opts(airprint_dns=True)
+    assert dns_nameservers(o, None) == {"global": ["1.1.1.1", "9.9.9.9"], "split": {}}
+    assert dns_nameservers(o, "100.64.0.1")["split"] == {"printers.home.arpa": ["100.64.0.1"]}
+    assert dns_nameservers(opts(dns_via_home=True), "100.64.0.1")["global"] == ["100.64.0.1"]

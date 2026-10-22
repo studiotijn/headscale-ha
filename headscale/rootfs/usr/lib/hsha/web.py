@@ -199,6 +199,9 @@ class App:
     async def external_test(self, _request: web.Request) -> web.Response:
         return web.json_response(await self.wizard.external_test())
 
+    async def dns_test(self, _request: web.Request) -> web.Response:
+        return web.json_response(await self.wizard.dns_test())
+
     async def porttest_get(self, _request: web.Request) -> web.Response:
         return web.json_response(self.wizard.port_test_view())
 
@@ -338,6 +341,7 @@ class App:
         app.router.add_post("/api/wizard/porttest", self.porttest_start)
         app.router.add_get("/api/wizard/porttest", self.porttest_get)
         app.router.add_post("/api/wizard/external", self.external_test)
+        app.router.add_post("/api/wizard/dnstest", self.dns_test)
         app.router.add_get("/api/qr", self.qr)
         app.router.add_get("/api/update", self.update_get)
         app.router.add_post("/api/update", self.update_post)

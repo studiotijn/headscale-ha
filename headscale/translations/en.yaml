@@ -57,6 +57,15 @@ configuration:
   headplane_port:
     name: Headplane port
     description: TCP port for Headplane on your LAN (http://homeassistant.local:PORT/admin). Do not forward this port.
+  airprint_dns:
+    name: AirPrint via VPN (experimental)
+    description: Publish the added printers via DNS-SD so iPhones, iPads and Macs find them through Tailscale.
+  dns_via_home:
+    name: All DNS via home
+    description: Send all DNS queries of tailnet devices to this Home Assistant (e.g. AdGuard Home). DNS stops working on the road when home is down.
+  printer_domain:
+    name: Printer domain
+    description: DNS-SD domain for AirPrint, e.g. printers.home.arpa.
   log_level:
     name: Log level
     description: Verbosity of the app log.

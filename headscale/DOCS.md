@@ -112,6 +112,19 @@ mDNS/AirPrint discovery does not cross a VPN tunnel, so the panel discovers prin
 **iPhone/iPad:** AirPrint only finds printers through local discovery, so it does not work over
 Tailscale. Use the manufacturer's app or an IPP printing app with the address shown.
 
+### AirPrint via VPN (experimental)
+
+Option `airprint_dns` (or the wizard step) publishes the added IPP printers via DNS-SD
+under `printer_domain`. Apple devices browse that search domain and show the printers in the
+normal print menu.
+
+- **AdGuard Home on port 53:** add `[/printers.home.arpa/]127.0.0.1:15353` under
+  AdGuard Home → Settings → DNS settings → Upstream DNS servers.
+- **Nothing on port 53:** the app answers on port 53 itself and forwards other queries.
+
+`dns_via_home` sends **all** DNS of tailnet devices to Home Assistant, which gives ad blocking
+on the road. When home is down, DNS stops working on the road.
+
 ## Security
 
 - Headscale is the key to your network: whoever controls it can add devices that reach your LAN.

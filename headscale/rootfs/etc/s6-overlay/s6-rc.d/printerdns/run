@@ -1,0 +1,9 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# DNS-SD server for AirPrint via the VPN (option airprint_dns)
+# ==============================================================================
+if [[ "$(python3 -m hsha.opt airprint_dns)" != "true" ]]; then
+    exec sleep infinity
+fi
+exec python3 -m hsha.dnssd

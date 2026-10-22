@@ -80,6 +80,30 @@ class Manager:
             self.poke()
         return self.tls
 
+    async def _record_router_ip(self, me: dict) -> None:
+        """Remember the router's tailnet IPv4; DNS features point devices at it."""
+        ipv4 = next((ip for ip in me.get("TailscaleIPs") or [] if "." in ip), None)
+        if not ipv4 or ipv4 == self.state.get("router_ipv4"):
+            return
+        self.state["router_ipv4"] = ipv4
+        save_state(self.state)
+        if self.opts.airprint_dns or self.opts.dns_via_home:
+            from .render import render
+
+            log.info("Router tailnet IP is %s: updating the DNS settings pushed to devices", ipv4)
+            await asyncio.to_thread(render, self.opts)
+            await self._restart_headscale()
+
+    async def _restart_headscale(self) -> None:
+        proc = await asyncio.create_subprocess_exec(
+            "s6-svc",
+            "-r",
+            "/run/service/headscale",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+
     async def watch_certificate(self) -> None:
         """Restart Headscale when the certificate app has renewed the certificate in /ssl.
 
@@ -99,14 +123,7 @@ class Manager:
         if mtime != self._cert_mtime:
             self._cert_mtime = mtime
             log.info("Certificate /ssl/%s changed: restarting Headscale to load it", self.opts.certfile)
-            proc = await asyncio.create_subprocess_exec(
-                "s6-svc",
-                "-r",
-                "/run/service/headscale",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.wait()
+            await self._restart_headscale()
             self.tls = None
 
     # ------------------------------------------------------------- bootstrap
@@ -157,6 +174,7 @@ class Manager:
 
         approved = await self._approve_router_routes(status, routes + (EXIT_ROUTES if exit_node else []))
         me = status.get("Self") or {}
+        await self._record_router_ip(me)
         self.router = {
             "enabled": True,
             "state": status.get("BackendState", "unknown"),
@@ -226,6 +244,10 @@ class Manager:
                 "protocol": protocol,
                 "resource": str(data.get("resource") or default_resource).lstrip("/"),
                 "model": data.get("model"),
+                # mDNS TXT record of the printer, replayed for AirPrint via DNS-SD.
+                "txt": {str(k)[:32]: str(v)[:200] for k, v in (data.get("txt") or {}).items()}
+                if isinstance(data.get("txt"), dict)
+                else {},
                 "added": int(time.time()),
             }
             self.state["printers"].append(printer)

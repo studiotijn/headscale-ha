@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- **AirPrint via VPN (experimental, off by default):** iPhones, iPads and Macs find the added
+  printers on the road through unicast DNS-SD ("wide-area Bonjour").
+  - A small DNS server in the app publishes the printers under `printer_domain`
+    (default `printers.home.arpa`), replaying each printer's own mDNS TXT record.
+  - Headscale gives devices that search domain and sends its queries (split DNS) to the
+    subnet router; Tailscale delivers them to port 53 of the Home Assistant host.
+  - With AdGuard Home on port 53, AdGuard forwards only this domain to the app with the rule
+    `[/printers.home.arpa/]127.0.0.1:15353`. Without it, the app listens on port 53 itself
+    and forwards all other queries.
+  - New wizard step with the AdGuard rule and a chain test.
+- **All DNS via home (optional):** all tailnet DNS goes through AdGuard at home.
+
 ## 0.3.0
 
 - **Certificates come from a separate app.** The built-in Let's Encrypt client has been removed.

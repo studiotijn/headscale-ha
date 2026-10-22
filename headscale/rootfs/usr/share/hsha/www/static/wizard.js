@@ -293,6 +293,37 @@ Object.assign(STRINGS.en, {
   ext_manual: "Or test yourself with your phone on mobile data (Wi-Fi off):",
 });
 
+Object.assign(STRINGS.nl, {
+  s_airprint: "AirPrint via VPN (experimenteel)",
+  s_airprint_sum: "iPhone, iPad en Mac vinden je printers ook onderweg.",
+  i_airprint: "AirPrint zoekt printers normaal alleen op het lokale netwerk. Apple-apparaten zoeken ook via gewone DNS (DNS-SD) in hun zoekdomeinen, en dat werkt via een VPN.\n\nDeze app publiceert de printers die je hebt toegevoegd onder {domain}. Headscale geeft je apparaten dat domein als zoekdomein en stuurt vragen ervoor naar de subnet-router thuis. Die komen binnen op poort 53 van Home Assistant.\n\nDraait daar AdGuard Home (poort 53 bezet), dan zet AdGuard alleen dit domein door naar de printer-DNS van deze app. Daarvoor voeg je één regel toe bij AdGuard Home → Instellingen → DNS-instellingen → Upstream DNS-servers. Al het andere blijft gewoon via AdGuard en je gateway lopen.\n\nAlle DNS via thuis: optioneel. Dan gaat al het DNS-verkeer van je apparaten via AdGuard thuis (advertentieblokkering onderweg). Nadeel: ligt thuis plat, dan werkt DNS onderweg niet.",
+  ap_enable: "AirPrint via VPN inschakelen", ap_disable: "Uitschakelen",
+  ap_home_on: "Alle DNS via thuis aanzetten", ap_home_off: "Alle DNS via thuis uitzetten",
+  ap_mode_adguard: "Poort 53 wordt gebruikt door AdGuard Home. Voeg deze regel toe bij AdGuard Home → Instellingen → DNS-instellingen → Upstream DNS-servers (onderaan de lijst):",
+  ap_mode_direct: "Poort 53 was vrij: de printer-DNS van deze app luistert er zelf en stuurt andere vragen door naar {fwd}.",
+  ap_no_router: "Wacht tot de subnet-router (stap 6) draait; zijn tailnet-adres wordt het DNS-adres voor je apparaten.",
+  ap_no_printers: "Voeg eerst een IPP-printer toe op het tabblad Printers.",
+  ap_test: "Keten testen", ap_test_ok: "Werkt: {domain} wordt beantwoord via poort 53 ✓", ap_test_printers: "Printers gevonden: {list}",
+  ap_test_fail: "Geen antwoord voor {domain} via poort 53. Staat de AdGuard-regel erin en is ‘Instellingen opslaan’ geklikt?",
+  ap_test_normal: "Gewone DNS via poort 53: {res}",
+  ap_ios: "Op je iPhone: Tailscale aan, MagicDNS aan (standaard). Open Delen → Print in een app; de printer verschijnt na enkele seconden.",
+});
+Object.assign(STRINGS.en, {
+  s_airprint: "AirPrint via VPN (experimental)",
+  s_airprint_sum: "iPhone, iPad and Mac find your printers on the road too.",
+  i_airprint: "AirPrint normally discovers printers on the local network only. Apple devices also browse ordinary DNS (DNS-SD) in their search domains, and that works through a VPN.\n\nThis app publishes the printers you added under {domain}. Headscale gives your devices that search domain and sends its queries to the subnet router at home, where they arrive on port 53 of Home Assistant.\n\nIf AdGuard Home runs there (port 53 in use), AdGuard forwards only this domain to the printer DNS of this app: add one line under AdGuard Home → Settings → DNS settings → Upstream DNS servers. Everything else keeps going through AdGuard and your gateway.\n\nAll DNS via home: optional. All DNS of your devices goes through AdGuard at home (ad blocking on the road). Downside: when home is down, DNS stops working on the road.",
+  ap_enable: "Enable AirPrint via VPN", ap_disable: "Disable",
+  ap_home_on: "Enable all DNS via home", ap_home_off: "Disable all DNS via home",
+  ap_mode_adguard: "Port 53 is used by AdGuard Home. Add this line under AdGuard Home → Settings → DNS settings → Upstream DNS servers (at the end of the list):",
+  ap_mode_direct: "Port 53 was free: this app's printer DNS listens there itself and forwards other queries to {fwd}.",
+  ap_no_router: "Wait until the subnet router (step 6) runs; its tailnet address becomes the DNS address for your devices.",
+  ap_no_printers: "Add an IPP printer on the Printers tab first.",
+  ap_test: "Test the chain", ap_test_ok: "Works: {domain} is answered through port 53 ✓", ap_test_printers: "Printers found: {list}",
+  ap_test_fail: "No answer for {domain} through port 53. Is the AdGuard line in place and did you click ‘Save’?",
+  ap_test_normal: "Normal DNS through port 53: {res}",
+  ap_ios: "On your iPhone: Tailscale on, MagicDNS on (default). Open Share → Print in an app; the printer appears after a few seconds.",
+});
+
 const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };
 const DOWNLOADS = [
   ["Windows", "https://tailscale.com/download/windows"],
@@ -595,6 +626,7 @@ function infoText(step) {
     port: ports.listen_port,
     stun: ports.stun_port,
     url: dev.login_server || "https://hs.…",
+    domain: (wizardData.steps.find((x) => x.id === "airprint") || { data: {} }).data.domain || "printers.home.arpa",
   });
 }
 
@@ -858,6 +890,44 @@ BODIES.external = (s) => {
         el("div", { class: "actions" },
           el("button", { class: `btn small ${d.answer === true ? "" : "secondary"}`, type: "button", onclick: () => answer("external_ok", true) }, `✓ ${t("ext_works")}`),
           el("button", { class: `btn small ${d.answer === false ? "danger-fill" : "secondary"}`, type: "button", onclick: () => answer("external_ok", false) }, t("ext_fails")))))));
+  }
+  return out;
+};
+
+BODIES.airprint = (s) => {
+  const d = s.data;
+  const out = [];
+  if (!d.enabled) {
+    const b = el("button", { class: "btn", type: "button" }, t("ap_enable"));
+    b.addEventListener("click", () => saveOptions({ airprint_dns: true }, b));
+    return [el("div", { class: "actions" }, b)];
+  }
+  if (!d.printers) out.push(note("info", t("ap_no_printers")));
+  if (!d.router_ip) out.push(note("warn", t("ap_no_router")));
+  if (d.mode === "adguard") {
+    out.push(note("info", el("p", {}, t("ap_mode_adguard")), copyable(`[/${d.domain}/]127.0.0.1:${d.port}`)));
+  } else if (d.mode === "direct") {
+    out.push(note("info", fmt("ap_mode_direct", { fwd: "Home Assistant DNS" })));
+  }
+  const tb = el("button", { class: "btn", type: "button" }, t("ap_test"));
+  tb.addEventListener("click", async () => {
+    busy(tb, true);
+    try { await api("wizard/dnstest", { method: "POST" }); await loadWizard(false); }
+    catch (err) { banner(err.message); } finally { busy(tb, false); }
+  });
+  const hb = el("button", { class: "btn secondary small", type: "button" }, d.dns_via_home ? t("ap_home_off") : t("ap_home_on"));
+  hb.addEventListener("click", () => saveOptions({ dns_via_home: !d.dns_via_home }, hb));
+  const off = el("button", { class: "btn secondary small", type: "button" }, t("ap_disable"));
+  off.addEventListener("click", () => saveOptions({ airprint_dns: false, dns_via_home: false }, off));
+  out.push(el("div", { class: "actions" }, tb, hb, off));
+  const r = d.test;
+  if (r) {
+    const names = (r.printers?.answers || []).map((a) => a.replace(/\\032/g, " ").split("._ipp")[0]);
+    out.push(note(r.ok ? "ok" : "fail",
+      el("p", {}, r.ok ? fmt("ap_test_ok", { domain: d.domain }) : fmt("ap_test_fail", { domain: d.domain })),
+      names.length ? el("p", {}, fmt("ap_test_printers", { list: names.join(", ") })) : "",
+      el("p", { class: "muted small" }, fmt("ap_test_normal", { res: r.normal_dns?.ok ? "✓" : (r.normal_dns?.error || r.normal_dns?.rcode || "✕") }))));
+    if (r.ok) out.push(note("info", t("ap_ios")));
   }
   return out;
 };

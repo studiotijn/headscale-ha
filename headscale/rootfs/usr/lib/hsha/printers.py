@@ -82,6 +82,7 @@ async def mdns_scan(duration: float = 4.0) -> list[dict]:
                 "admin_url": txt.get("adminurl"),
                 "location": txt.get("note") or None,
                 "source": "mdns",
+                "txt": {k: v for k, v in txt.items() if len(k) <= 32 and len(v) <= 200},
             }
             found[(entry["ip"], protocol)] = entry
     finally:

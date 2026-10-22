@@ -27,6 +27,9 @@ DEFAULTS = {
     "userspace_networking": True,
     "headplane": True,
     "headplane_port": 3000,
+    "airprint_dns": False,
+    "dns_via_home": False,
+    "printer_domain": "printers.home.arpa",
     "log_level": "info",
 }
 
