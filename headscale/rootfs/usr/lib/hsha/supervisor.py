@@ -181,3 +181,47 @@ def certificate_apps() -> list[dict]:
             if slug.endswith(suffix):
                 out.append({"slug": slug, "name": app.get("name") or label, "state": app.get("state"), "kind": suffix})
     return out
+
+
+# Home Assistant Core (needs homeassistant_api: true) --------------------------------
+def core_language() -> str:
+    """Language of the Home Assistant user interface ("nl", "en", ...)."""
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return "en"
+    req = urllib.request.Request(f"{SUPERVISOR}/core/api/config", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return str(json.loads(resp.read().decode()).get("language") or "en")
+    except Exception:
+        return "en"
+
+
+def _core_service(domain: str, service: str, data: dict) -> None:
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return
+    req = urllib.request.Request(
+        f"{SUPERVISOR}/core/api/services/{domain}/{service}",
+        data=json.dumps(data).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception as exc:
+        log.warning("Home Assistant service %s.%s failed: %s", domain, service, exc)
+
+
+def notify(notification_id: str, title: str, message: str) -> None:
+    """Show (or replace) a persistent notification in Home Assistant."""
+    _core_service(
+        "persistent_notification",
+        "create",
+        {"notification_id": notification_id, "title": title, "message": message},
+    )
+
+
+def dismiss(notification_id: str) -> None:
+    _core_service("persistent_notification", "dismiss", {"notification_id": notification_id})

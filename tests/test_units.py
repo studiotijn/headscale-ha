@@ -190,6 +190,90 @@ def test_wizard_covers_and_coerce():
         Wizard._coerce({"log_level": "debug"})
 
 
+def test_certificate_renewal_schedule(ssl_dir):
+    from hsha import certs
+
+    day = certs.DAY
+    entry = {"issued": 0, "expires": 90 * day, "issuer": "Let's Encrypt"}
+    assert certs.renewal(entry, now=10 * day)["state"] == "ok"
+    assert certs.renewal(entry, now=61 * day)["state"] == "due"  # 30 days before expiry
+    assert certs.renewal(entry, now=69 * day)["state"] == "overdue"  # a week past that
+    assert certs.renewal(entry, now=85 * day)["state"] == "critical"
+    assert certs.renewal(entry, now=91 * day)["state"] == "expired"
+    assert certs.renewal(entry, now=0)["lets_encrypt"]
+    # Shorter certificates: same proportions (45 days -> renew with 15 days left).
+    short = {"issued": 0, "expires": 45 * day}
+    assert certs.renewal(short, now=29 * day)["state"] == "ok"
+    assert certs.renewal(short, now=31 * day)["state"] == "due"
+    assert certs.renewal(None)["state"] == "unknown"
+    inv = certs.inventory()[0]
+    assert inv["issued"] and inv["expires"] - inv["issued"] == 30 * day
+    assert certs.renewal(inv)["lifetime_days"] == 30
+
+
+class _FakeManager:
+    def __init__(self):
+        self.state = {"printers": [], "services": []}
+
+
+class _FakeApp:
+    def __init__(self):
+        self.manager = _FakeManager()
+
+
+def test_wizard_progress_broken_ignored_and_overview(monkeypatch):
+    from hsha import wizard as wz
+
+    monkeypatch.setattr(wz, "save_state", lambda state: None)
+    w = wz.Wizard(_FakeApp())
+
+    def steps(**status):
+        return [{"id": sid, "status": status.get(sid, "ok"), "issues": [], "data": {}} for sid in ("a", "b", "c", "d")]
+
+    r = w._summarise(steps(d="todo"), set(), now=1000)
+    assert r["progress"] == 75 and [s["state"] for s in r["segments"]] == ["ok", "ok", "ok", "todo"]
+    r = w._summarise(steps(), set(), now=2000)
+    assert r["progress"] == 100 and r["overview"]["visible"]
+    # Something that worked breaks: within the grace period it still counts as done.
+    r = w._summarise(steps(b="fail"), set(), now=3000)
+    assert r["progress"] == 100 and not r["broken"]
+    r = w._summarise(steps(b="fail"), set(), now=3000 + wz.BROKEN_GRACE)
+    assert r["broken"] == ["b"] and r["segments"][1]["state"] == "broken" and r["progress"] == 75
+    # Ignoring it takes it out of the total: green 100 % again.
+    r = w._summarise(steps(b="fail"), {"b"}, now=3000 + wz.BROKEN_GRACE)
+    assert r["progress"] == 100 and len(r["segments"]) == 3 and r["ignored"] == ["b"]
+    # The overview card hides itself after an hour at 100 %.
+    t0 = 3000 + wz.BROKEN_GRACE
+    assert w._summarise(steps(b="fail"), {"b"}, now=t0 + 10)["overview"]["visible"]
+    r = w._summarise(steps(b="fail"), {"b"}, now=t0 + wz.AUTO_HIDE_AFTER + 1)
+    assert r["overview"]["auto_hidden"] and not r["overview"]["visible"]
+    # Hidden by the user; it comes back when something new breaks.
+    w.set_overview_hidden(True, [])
+    assert not w._summarise(steps(d="todo"), set(), now=t0)["overview"]["visible"]
+    assert w._summarise(steps(c="fail"), set(), now=t0)["overview"]["visible"] is False
+    r = w._summarise(steps(c="fail"), set(), now=t0 + wz.BROKEN_GRACE)
+    assert "c" in r["broken"] and r["overview"]["visible"]
+
+
+def test_wizard_migrates_skipped():
+    from hsha.wizard import Wizard
+
+    app = _FakeApp()
+    app.manager.state["wizard"] = {"skipped": ["printers"]}
+    assert Wizard(app).wstate["ignored"] == ["printers"] and "skipped" not in app.manager.state["wizard"]
+
+
+def test_certificate_notification_texts():
+    from hsha.wizard import cert_notification
+
+    renewal = {"file": "fullchain.pem", "expires": 2_000_000_000, "due": 1_997_000_000}
+    data = {"providers": [{"kind": "letsencrypt"}]}
+    title, msg = cert_notification("cert_renewal_overdue", renewal, data, "nl")
+    assert "niet op tijd" in title and "Let's Encrypt-app" in msg
+    title, msg = cert_notification("cert_renewal_critical", renewal, {}, "en")
+    assert "expires soon" in title and "Duck DNS" in msg
+
+
 def test_options_configured_placeholder():
     assert not opts(server_url=DEFAULTS["server_url"]).configured
     assert opts(server_url="https://hs.vll6.duckdns.org").configured

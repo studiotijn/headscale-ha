@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.0
+
+- **Certificate renewal is monitored.** Every 15 minutes the app checks that the certificate in
+  `/ssl` is renewed on schedule (when a third of its lifetime is left: 30 days for Let's Encrypt).
+  About a week late, or close to expiry, the Certificate step turns amber or red and Home
+  Assistant shows a notification; it disappears once the certificate is renewed. The step shows
+  when renewal is expected and also warns when Headscale still serves an old certificate.
+  The app now uses the Home Assistant API (`homeassistant_api`) for these notifications.
+- **Progress bar per step.** Green is done; red means a step no longer works (it worked before
+  and has been failing for 10 minutes) or fails; amber is a warning.
+- **Ignore a step.** Every step that isn't done can be ignored. It no longer counts, so the bar is
+  green at 100% again. *Count again* undoes it. This replaces *Skip* (skipped steps become ignored).
+- **Hide the setup card on the overview.** With *Hide*, or automatically after an hour at 100%.
+  It comes back as soon as something stops working.
+- The setup checks also run in the background, so a step that breaks is noticed without opening
+  the panel.
+- README restructured; development notes moved to `CONTRIBUTING.md`.
+
 ## 0.11.0
 
 - **Move a device to another network.** In a device's access panel (Networks), choose the

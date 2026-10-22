@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Headscale
-version: "0.11.0"
+version: "0.12.0"
 slug: headscale
 description: >-
   Self-hosted Tailscale control server (Headscale) with DERP relay, subnet router,
@@ -23,6 +23,8 @@ ingress_stream: true
 panel_icon: mdi:vpn
 panel_title: Headscale
 
+# homeassistant_api: notifications when the certificate is not renewed on time.
+homeassistant_api: true
 hassio_api: true
 # manager: needed for the in-app "check for updates / update / rebuild" buttons.
 hassio_role: manager

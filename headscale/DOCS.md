@@ -78,6 +78,22 @@ The wizard tests as much as possible itself: DNS against your public IP, a port-
 from the internet (through check-host.net nodes, or your phone on mobile data), the certificate
 as clients see it, HTTPS from the internet, the subnet router and your first device.
 
+**Progress bar.** The bar has one segment per step. Green is done, red means the step no longer
+works (it worked before and has been failing for more than 10 minutes, so a restart of the app
+never turns it red) or fails, amber is a warning. Can't or won't fix a step? Choose **Ignore**:
+the step no longer counts, so the bar is green at 100% again. *Count again* undoes it.
+
+**Overview.** The setup card on the overview can be hidden with **Hide**. It hides itself once
+everything has been at 100% for an hour, and comes back by itself as soon as something stops
+working. *Show on the overview again* on the Setup tab brings it back by hand.
+
+**Certificate renewal.** When the certificate comes from `/ssl`, the app checks every 15 minutes
+that it is renewed on schedule. ACME clients renew when a third of the lifetime is left (30
+days for a 90-day Let's Encrypt certificate). If that has not happened about a week later, or
+the certificate expires within days, the Certificate step turns amber or red and Home Assistant
+shows a notification (removed again once the certificate is renewed). It also warns when the
+file in `/ssl` was renewed but Headscale still serves the old certificate.
+
 ## First steps
 
 1. Start the app and check the log for `Headscale ready`. Open the **Headscale** panel in

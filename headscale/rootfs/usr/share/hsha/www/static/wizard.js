@@ -338,7 +338,50 @@ Object.assign(STRINGS.en, {
   ap_ios: "On your iPhone: Tailscale on, MagicDNS on (default). Open Share → Print in an app; the printer appears after a few seconds. Not showing? iOS often doesn't look for printers over a VPN. Install the iPhone profile (Printers tab): that always works.",
 });
 
-const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };
+// ---- 0.12.0: ignore steps, broken segments, hide the overview card, certificate renewal
+Object.assign(STRINGS.nl, {
+  wiz_ignore: "Negeren", wiz_unignore: "Weer meetellen", st_ignored: "Genegeerd", st_broken: "Werkt niet meer",
+  wiz_broken_note: "Dit werkte eerder, maar nu niet meer (sinds {since}). Los het op, of kies Negeren: dan telt deze stap niet meer mee en wordt de balk weer groen.",
+  wiz_ignored_note: "Deze stap wordt genegeerd en telt niet mee voor de voortgang.",
+  wiz_broken_list: "Werkt niet meer: {list}", wiz_ignored_count: "{n} genegeerd",
+  wiz_hide: "Verbergen", wiz_show_overview: "Weer tonen op het overzicht",
+  wiz_hidden_user: "De installatie-assistent is verborgen op het overzicht. Hij verschijnt vanzelf weer als er iets niet meer werkt.",
+  wiz_hidden_auto: "Alles staat al langer dan een uur op 100%, dus de installatie-assistent is verborgen op het overzicht. Hij verschijnt vanzelf weer als er iets niet meer werkt.",
+  wiz_autohide_note: "Wordt automatisch verborgen nadat alles een uur op 100% staat.",
+  seg_ok: "klaar", seg_todo: "te doen", seg_warn: "let op", seg_fail: "probleem", seg_broken: "werkt niet meer",
+  cert_renewal_ok: "Vernieuwing verwacht rond {due}. Verloopt op {expires} ({days} dagen).",
+  cert_renewal_due: "Staat klaar om vernieuwd te worden (sinds {due}). Uiterlijk {overdue} verwacht; verloopt op {expires}.",
+  cert_renewal_overdue: "Niet op tijd vernieuwd: dat had rond {due} moeten gebeuren. Verloopt op {expires} ({days} dagen). Draait de certificaat-app nog?",
+  cert_renewal_critical: "Verloopt over {days} dagen ({expires}) en is nog niet vernieuwd. Daarna kunnen je apparaten Headscale niet meer bereiken.",
+  cert_renewal_expired: "Verlopen op {expires}.",
+  cert_renewed_at: "Bestand laatst bijgewerkt: {date}.",
+  cert_le_start: "Start de Let's Encrypt-app nu en bekijk zijn logboek. Laat een automatisering hem elke week starten.",
+  cert_not_loaded: "Het certificaat in /ssl is vernieuwd (tot {disk}), maar Headscale gebruikt nog het oude (tot {served}). Herstart de app.",
+  cert_monitor: "Deze app controleert elke 15 minuten of het certificaat op tijd vernieuwd wordt en meldt het in Home Assistant als dat niet zo is.",
+});
+Object.assign(STRINGS.en, {
+  wiz_ignore: "Ignore", wiz_unignore: "Count again", st_ignored: "Ignored", st_broken: "No longer works",
+  wiz_broken_note: "This worked before but doesn't any more (since {since}). Fix it, or choose Ignore: the step no longer counts and the bar turns green again.",
+  wiz_ignored_note: "This step is ignored and doesn't count towards the progress.",
+  wiz_broken_list: "No longer works: {list}", wiz_ignored_count: "{n} ignored",
+  wiz_hide: "Hide", wiz_show_overview: "Show on the overview again",
+  wiz_hidden_user: "The setup wizard is hidden on the overview. It comes back by itself when something stops working.",
+  wiz_hidden_auto: "Everything has been at 100% for over an hour, so the setup wizard is hidden on the overview. It comes back by itself when something stops working.",
+  wiz_autohide_note: "Hides itself after everything has been at 100% for an hour.",
+  seg_ok: "done", seg_todo: "to do", seg_warn: "attention", seg_fail: "problem", seg_broken: "no longer works",
+  cert_renewal_ok: "Renewal expected around {due}. Expires on {expires} ({days} days).",
+  cert_renewal_due: "Due for renewal (since {due}). Expected by {overdue}; expires on {expires}.",
+  cert_renewal_overdue: "Not renewed on time: that should have happened around {due}. Expires on {expires} ({days} days). Is the certificate app still running?",
+  cert_renewal_critical: "Expires in {days} days ({expires}) and hasn't been renewed. After that your devices can no longer reach Headscale.",
+  cert_renewal_expired: "Expired on {expires}.",
+  cert_renewed_at: "File last updated: {date}.",
+  cert_le_start: "Start the Let's Encrypt app now and check its log. Let an automation start it every week.",
+  cert_not_loaded: "The certificate in /ssl was renewed (until {disk}), but Headscale still serves the old one (until {served}). Restart the app.",
+  cert_monitor: "This app checks every 15 minutes that the certificate is renewed on time and notifies you in Home Assistant when it isn't.",
+});
+
+const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", ignored: "–", broken: "✕" };
+const fmtDate = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString(LANG === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "?");
 const DOWNLOADS = [
   ["Windows", "https://tailscale.com/download/windows"],
   ["macOS", "https://tailscale.com/download/mac"],
@@ -419,9 +462,16 @@ async function answer(key, value) {
   catch (err) { banner(err.message); }
 }
 
-async function skip(step, skipped) {
-  try { wizardData = await api("wizard/skip", { method: "POST", body: { step, skipped } }); renderWizard(); }
+async function ignoreStep(step, ignored) {
+  try { wizardData = await api("wizard/ignore", { method: "POST", body: { step, ignored } }); renderWizard(); }
   catch (err) { banner(err.message); }
+}
+
+async function setOverviewHidden(hidden) {
+  try {
+    const w = await api("wizard/overview", { method: "POST", body: { hidden } });
+    if (current === "setup") { wizardData = w; renderWizard(); } else { await renderProgressCard(); }
+  } catch (err) { banner(err.message); }
 }
 
 // ---------------------------------------------------------------- step bodies
@@ -644,14 +694,20 @@ function renderWizard() {
   const w = wizardData;
   const root = $("#wizard");
   if (!w) return;
-  const firstOpen = w.steps.find((s) => !["ok", "skipped"].includes(s.status) && !s.optional) || w.steps.find((s) => !["ok", "skipped"].includes(s.status));
+  const pending = (s) => !s.ignored && (s.status !== "ok" || s.broken);
+  const firstOpen = w.steps.find((s) => s.broken) || w.steps.find((s) => pending(s) && !s.optional) || w.steps.find(pending);
   if (!openSteps.size && firstOpen) openSteps.add(firstOpen.id);
 
   const head = el("article", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, t("wiz_title")),
       el("button", { class: "btn secondary small", type: "button", onclick: (e) => { busy(e.target, true); loadWizard(true).finally(() => busy(e.target, false)); } }, t("wiz_retest"))),
     el("p", { class: "muted" }, t("wiz_intro")),
-    progressBar(w.progress));
+    progressBar(w));
+  const ov = w.overview || {};
+  if (ov.hidden_by_user || ov.auto_hidden) {
+    head.append(note("info", el("p", {}, t(ov.hidden_by_user ? "wiz_hidden_user" : "wiz_hidden_auto")),
+      el("div", { class: "actions" }, el("button", { class: "btn secondary small", type: "button", onclick: () => setOverviewHidden(false) }, t("wiz_show_overview")))));
+  }
   const setup = w.setup_mode;
   if (setup) {
     const msg = setup.reason === "unconfigured" ? t("setup_unconfigured")
@@ -662,7 +718,8 @@ function renderWizard() {
 
   const list = el("ol", { class: "steps-list" }, ...w.steps.map((s, i) => {
     const open = openSteps.has(s.id);
-    const icon = el("span", { class: `step-icon ${s.status}` }, STEP_ICON[s.status] || String(i + 1));
+    const shown = s.ignored ? "ignored" : s.broken ? "broken" : s.status;
+    const icon = el("span", { class: `step-icon ${shown}` }, STEP_ICON[shown] || String(i + 1));
     const infoBtn = el("button", { class: "info-btn", type: "button", "aria-label": "info", title: "Info" }, "i");
     const info = el("div", { class: "info-panel", hidden: "" }, ...multiline(infoText(s)));
     infoBtn.addEventListener("click", (e) => { e.stopPropagation(); info.hidden = !info.hidden; });
@@ -671,19 +728,20 @@ function renderWizard() {
       el("div", { class: "step-title" },
         el("strong", {}, t(`s_${s.id}`), s.optional ? el("span", { class: "muted small" }, ` · ${t("wiz_optional")}`) : ""),
         el("div", { class: "muted small" }, t(`s_${s.id}_sum`))),
-      el("span", { class: `pill ${s.status === "ok" ? "ok" : s.status === "fail" ? "bad" : ""}` }, t(`st_${s.status}`)),
+      el("span", { class: `pill ${shown === "ok" ? "ok" : ["fail", "broken"].includes(shown) ? "bad" : ""}` }, t(`st_${shown}`)),
       infoBtn);
     const toggle = () => { open ? openSteps.delete(s.id) : openSteps.add(s.id); renderWizard(); };
     header.addEventListener("click", toggle);
     header.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
-    const li = el("li", { class: `step ${s.status} ${open ? "open" : ""}` }, header, info);
+    const li = el("li", { class: `step ${shown} ${open ? "open" : ""}` }, header, info);
     if (open) {
-      const body = el("div", { class: "step-body" }, ...(BODIES[s.id](s) || []));
-      if (s.optional || s.id === "external") {
-        body.append(el("div", { class: "actions end" }, s.status === "skipped"
-          ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, false) }, t("wiz_unskip"))
-          : s.status !== "ok" ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, true) }, t("wiz_skip")) : ""));
-      }
+      const body = el("div", { class: "step-body" });
+      if (s.ignored) body.append(note("info", t("wiz_ignored_note")));
+      if (s.broken) body.append(note("fail", fmt("wiz_broken_note", { since: new Date(s.broken_since * 1000).toLocaleString(LANG === "nl" ? "nl-NL" : "en-GB") })));
+      body.append(...(BODIES[s.id](s) || []));
+      body.append(el("div", { class: "actions end" }, s.ignored
+        ? el("button", { class: "btn secondary small", type: "button", onclick: () => ignoreStep(s.id, false) }, t("wiz_unignore"))
+        : s.status !== "ok" ? el("button", { class: "btn secondary small", type: "button", onclick: () => ignoreStep(s.id, true) }, t("wiz_ignore")) : ""));
       li.append(body);
     }
     return li;
@@ -691,10 +749,21 @@ function renderWizard() {
   root.replaceChildren(head, el("article", { class: "card" }, list));
 }
 
-function progressBar(pct) {
-  return el("div", { class: "progress" },
-    el("div", { class: "progress-track" }, el("div", { class: `progress-fill ${pct === 100 ? "complete" : ""}`, style: `width:${pct}%` })),
-    el("span", { class: "progress-label" }, `${t("wiz_progress")}: ${pct}%`));
+// One segment per counted step: green when done, red when it no longer works (or fails),
+// amber for a warning, empty while still to do. Ignored steps have no segment.
+function progressBar(w) {
+  const segs = w.segments || [];
+  const track = el("div", {
+    class: `progress-track segmented ${w.progress === 100 ? "complete" : ""}`, role: "progressbar",
+    "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(w.progress),
+  }, ...segs.map((g) => el("div", { class: `seg ${g.state}`, title: `${t(`s_${g.id}`)}: ${t(`seg_${g.state}`)}` })));
+  const extra = (w.ignored || []).length ? ` · ${fmt("wiz_ignored_count", { n: w.ignored.length })}` : "";
+  const out = el("div", { class: "progress-wrap" },
+    el("div", { class: "progress" }, track, el("span", { class: "progress-label" }, `${t("wiz_progress")}: ${w.progress}%${extra}`)));
+  if ((w.broken || []).length) {
+    out.append(el("p", { class: "progress-broken" }, fmt("wiz_broken_list", { list: w.broken.map((id) => t(`s_${id}`)).join(", ") })));
+  }
+  return out;
 }
 
 async function loadWizard(refresh = false) {
@@ -707,12 +776,17 @@ async function loadWizard(refresh = false) {
 async function renderProgressCard() {
   const w = await api("wizard");
   const card = $("#progress-card");
-  const next = w.steps.find((s) => !["ok", "skipped"].includes(s.status));
+  if (!(w.overview || {}).visible) { card.hidden = true; return; }
+  const next = w.steps.find((s) => s.broken) || w.steps.find((s) => !s.ignored && s.status !== "ok");
+  card.classList.toggle("has-broken", (w.broken || []).length > 0);
   card.replaceChildren(
     el("div", { class: "card-head" }, el("h2", {}, t("wiz_title")),
-      el("button", { class: "btn small", type: "button", onclick: () => { openSteps.clear(); show("setup"); } }, t("wiz_open"))),
-    progressBar(w.progress),
-    el("p", { class: "muted" }, next ? `${t("wiz_next")}: ${t(`s_${next.id}`)}` : t("wiz_done_all")));
+      el("div", { class: "actions" },
+        el("button", { class: "btn small", type: "button", onclick: () => { openSteps.clear(); show("setup"); } }, t("wiz_open")),
+        el("button", { class: "btn secondary small", type: "button", onclick: () => setOverviewHidden(true) }, t("wiz_hide")))),
+    progressBar(w),
+    el("p", { class: "muted" }, next ? `${t("wiz_next")}: ${t(`s_${next.id}`)}` : t("wiz_done_all")),
+    w.progress === 100 ? el("p", { class: "muted small" }, t("wiz_autohide_note")) : "");
   card.hidden = false;
 }
 
@@ -756,7 +830,16 @@ BODIES.certificate = (s) => {
     })));
   }
   if (s.issues.includes("cert_problem")) out.push(note("fail", el("p", {}, t("cert_problem")), el("p", {}, d.problem)));
-  if (s.issues.includes("cert_expiring")) out.push(note("warn", t("cert_expiring")));
+  const r = d.renewal;
+  if (r && r.state && r.state !== "unknown") {
+    const vars = { due: fmtDate(r.due), overdue: fmtDate(r.overdue_at), expires: fmtDate(r.expires), days: r.days_left };
+    const kind = { ok: "ok", due: "info", overdue: "warn", critical: "fail", expired: "fail" }[r.state] || "info";
+    const box = note(kind, el("p", {}, fmt(`cert_renewal_${r.state}`, vars)), el("p", { class: "small" }, fmt("cert_renewed_at", { date: fmtDate(r.renewed) })));
+    if (["overdue", "critical", "expired"].includes(r.state) && (d.providers || []).some((p) => p.kind === "letsencrypt")) box.append(el("p", {}, t("cert_le_start")));
+    out.push(box);
+    out.push(el("p", { class: "muted small" }, t("cert_monitor")));
+  }
+  if (s.issues.includes("cert_not_loaded")) out.push(note("warn", fmt("cert_not_loaded", { disk: fmtDate(r && r.expires), served: fmtDate(d.served_expires) })));
   const proxy = el("details", {}, el("summary", {}, t("proxy_mode")), el("p", { class: "muted" }, t("alt_proxy_desc")));
   const pb = el("button", { class: "btn secondary small", type: "button" }, t("apply"));
   pb.addEventListener("click", () => saveOptions({ tls_mode: "none", listen_port: 8080 }, pb));

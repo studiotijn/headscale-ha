@@ -159,6 +159,17 @@ input.wide { width: min(420px, 100%); }
 .progress-fill { height: 100%; background: var(--primary); border-radius: 999px; transition: width .4s ease; }
 .progress-fill.complete { background: var(--ok); }
 .progress-label { font-weight: 500; white-space: nowrap; }
+.progress-track.segmented { display: flex; gap: 2px; background: none; }
+.progress-track.segmented .seg { flex: 1; background: var(--code-bg); transition: background .4s ease; }
+.progress-track.segmented .seg:first-child { border-radius: 999px 0 0 999px; }
+.progress-track.segmented .seg:last-child { border-radius: 0 999px 999px 0; }
+.progress-track.segmented .seg:only-child { border-radius: 999px; }
+.progress-track.segmented .seg.ok { background: var(--ok); }
+.progress-track.segmented .seg.warn { background: var(--warn); }
+.progress-track.segmented .seg.fail, .progress-track.segmented .seg.broken { background: var(--danger); }
+.progress-track.segmented.complete { gap: 0; }
+.progress-broken { color: var(--danger); font-weight: 500; margin: 0 0 4px; }
+.progress-card.has-broken { border-left: 4px solid var(--danger); }
 
 .steps-list { list-style: none; margin: 0; padding: 0; }
 .step { border-top: 1px solid var(--border); }
@@ -176,7 +187,9 @@ input.wide { width: min(420px, 100%); }
 .step-icon.ok { background: var(--ok); border-color: var(--ok); color: var(--card); }
 .step-icon.warn { border-color: var(--warn); color: var(--warn); }
 .step-icon.fail { border-color: var(--danger); color: var(--danger); }
-.step-icon.skipped { border-style: dashed; }
+.step-icon.ignored { border-style: dashed; opacity: .6; }
+.step-icon.broken { background: var(--danger); border-color: var(--danger); color: var(--card); }
+.step.ignored .step-title { opacity: .6; }
 .info-btn {
   width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--primary);
   background: transparent; color: var(--primary); font: italic 700 13px/1 Georgia, serif;
@@ -236,7 +249,7 @@ table.compact th, table.compact td { padding: 6px 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
-  .progress-fill { transition: none; }
+  .progress-fill, .progress-track.segmented .seg { transition: none; }
 }
 ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 ul.plain li { margin: 4px 0; }

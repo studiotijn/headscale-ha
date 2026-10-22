@@ -435,7 +435,7 @@ function boot() {
     show(initial);
   } else {
     // First visit in this session: open the setup wizard until it is complete.
-    api("wizard").then((w) => show(w.progress < 100 ? "setup" : "overview")).catch(() => show("overview"));
+    api("wizard").then((w) => show(w.progress < 100 && (w.overview || {}).visible ? "setup" : "overview")).catch(() => show("overview"));
   }
   setInterval(() => { if (current === "overview" && !document.hidden) loadStatus().catch(() => {}); }, 15000);
 }

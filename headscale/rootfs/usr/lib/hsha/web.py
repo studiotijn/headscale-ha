@@ -71,6 +71,9 @@ def _node(n: dict) -> dict:
     }
 
 
+MONITOR_INTERVAL = 900
+
+
 class App:
     def __init__(self):
         self.opts = load()
@@ -224,7 +227,14 @@ class App:
 
     async def wizard_skip(self, request: web.Request) -> web.Response:
         body = await request.json()
-        self.wizard.skip(str(body.get("step")), bool(body.get("skipped", True)))
+        flag = body.get("ignored", body.get("skipped", True))
+        self.wizard.ignore(str(body.get("step")), bool(flag))
+        return web.json_response(await self.wizard.evaluate())
+
+    async def wizard_overview(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        current = await self.wizard.evaluate()
+        self.wizard.set_overview_hidden(bool(body.get("hidden", True)), current["broken"])
         return web.json_response(await self.wizard.evaluate())
 
     async def porttest_start(self, request: web.Request) -> web.Response:
@@ -628,6 +638,8 @@ class App:
         app.router.add_get("/api/wizard", self.wizard_get)
         app.router.add_post("/api/wizard/answer", self.wizard_answer)
         app.router.add_post("/api/wizard/skip", self.wizard_skip)
+        app.router.add_post("/api/wizard/ignore", self.wizard_skip)
+        app.router.add_post("/api/wizard/overview", self.wizard_overview)
         app.router.add_post("/api/wizard/options", self.wizard_options)
         app.router.add_post("/api/wizard/porttest", self.porttest_start)
         app.router.add_get("/api/wizard/porttest", self.porttest_get)
@@ -668,9 +680,22 @@ class App:
 
     async def _start_manager(self, app: web.Application) -> None:
         app["manager_task"] = asyncio.create_task(self.manager.run())
+        app["monitor_task"] = asyncio.create_task(self._monitor())
 
     async def _stop_manager(self, app: web.Application) -> None:
         app["manager_task"].cancel()
+        app["monitor_task"].cancel()
+
+    async def _monitor(self) -> None:
+        """Re-evaluate the setup steps and the certificate renewal in the background,
+        also when nobody opens the panel."""
+        await asyncio.sleep(120)  # let Headscale and the router come up first
+        while True:
+            try:
+                await self.wizard.monitor()
+            except Exception as exc:
+                log.warning("Background check failed: %s", exc)
+            await asyncio.sleep(MONITOR_INTERVAL)
 
 
 def main() -> int:

@@ -47,6 +47,12 @@ ANSWERS = {
     "proxy_ok": {True, False},
 }
 OPTIONAL_STEPS = {"headplane", "printers", "airprint"}
+# A step that worked before only counts as broken after it has been failing this long,
+# so a restart of the app (Headscale and the router come up again) never shows red.
+BROKEN_GRACE = 600
+# The setup card on the overview hides itself after this long at 100 %.
+AUTO_HIDE_AFTER = 3600
+CERT_NOTIFICATION = "headscale_certificate"
 STEP_ORDER = [
     "certificate",
     "address",
@@ -77,9 +83,15 @@ class Wizard:
     def wstate(self) -> dict:
         state = self.app.manager.state
         state.setdefault("wizard", {})
-        state["wizard"].setdefault("answers", {})
-        state["wizard"].setdefault("skipped", [])
-        return state["wizard"]
+        w = state["wizard"]
+        w.setdefault("answers", {})
+        # "skipped" (before 0.12) counted as done; ignored steps simply don't count.
+        if "skipped" in w:
+            w["ignored"] = sorted(set(w.get("ignored", [])) | set(w.pop("skipped")))
+        w.setdefault("ignored", [])
+        w.setdefault("ever_ok", [])
+        w.setdefault("nonok_since", {})
+        return w
 
     async def _cached(self, key: str, ttl: float, refresh: bool, func, *args):
         now = time.monotonic()
@@ -99,7 +111,7 @@ class Wizard:
         runtime = read_json(paths.RUNTIME, {})
         setup = runtime.get("setup_mode")
         answers = self.wstate["answers"]
-        skipped = set(self.wstate["skipped"])
+        ignored = set(self.wstate["ignored"])
         hs_running = await asyncio.to_thread(netcheck.tcp_listening, int(o.listen_port))
         steps: dict[str, dict] = {}
 
@@ -108,6 +120,7 @@ class Wizard:
         providers = await self._cached("certapps", 60, refresh, supervisor.certificate_apps)
         providers = providers if isinstance(providers, list) else []
         cert_problem = None
+        renewal = None
         issues = []
         if o.tls_mode == "none":
             status = "ok" if answers.get("proxy_ok") else "todo"
@@ -118,12 +131,19 @@ class Wizard:
         else:
             cert_problem = certs.check(o.certfile, o.keyfile, o.server_host) if o.configured else None
             chosen = next((c for c in inventory if c["file"] == o.certfile), None)
+            renewal = certs.renewal(chosen) if chosen else None
+            if renewal:
+                renewal["file"] = chosen["file"]
+                renewal["renewed"] = chosen.get("mtime")
+            rstate = (renewal or {}).get("state")
             if not o.configured:
                 status = "todo"
             elif cert_problem:
                 status, issues = "fail", ["cert_problem"]
-            elif chosen and chosen["days_left"] is not None and chosen["days_left"] < 14:
-                status, issues = "warn", ["cert_expiring"]
+            elif rstate in ("critical", "expired"):
+                status, issues = "fail", ["cert_renewal_critical"]
+            elif rstate == "overdue":
+                status, issues = "warn", ["cert_renewal_overdue"]
             else:
                 status = "ok"
         steps["certificate"] = {
@@ -136,6 +156,7 @@ class Wizard:
                 "certificates": inventory,
                 "providers": providers,
                 "problem": cert_problem,
+                "renewal": renewal,
                 "server_host": o.server_host if o.configured else "",
             },
         }
@@ -241,6 +262,13 @@ class Wizard:
             "issues": issues,
             "data": {"tls_mode": o.tls_mode, "check": tls, "listen_port": o.listen_port},
         }
+        # The file in /ssl was renewed but Headscale still serves the old one?
+        cert_step = steps["certificate"]
+        served = (tls or self.app.manager.tls or {}).get("expires")
+        on_disk = (cert_step["data"].get("renewal") or {}).get("expires")
+        if served and on_disk and on_disk - served > certs.DAY and cert_step["status"] == "ok":
+            cert_step["status"], cert_step["issues"] = "warn", ["cert_not_loaded"]
+            cert_step["data"]["served_expires"] = served
 
         # 5. Reachable from the internet (HTTPS end-to-end) ------------------------
         ext = self.wstate.get("external_test")
@@ -350,22 +378,126 @@ class Wizard:
                 "pushed": self._pushed_dns(),
             },
         }
-        out = []
-        for sid in STEP_ORDER:
-            step = steps[sid]
-            if sid in skipped and step["status"] != "ok":
-                step["status"] = "skipped"
-            out.append({"id": sid, "optional": sid in OPTIONAL_STEPS, **step})
-        done = sum(1 for s in out if s["status"] in ("ok", "skipped"))
+        out = [{"id": sid, "optional": sid in OPTIONAL_STEPS, **steps[sid]} for sid in STEP_ORDER]
+        summary = self._summarise(out, ignored)
         return {
-            "progress": round(100 * done / len(out)),
-            "done": done,
-            "total": len(out),
+            **summary,
             "setup_mode": setup,
             "headscale_running": hs_running,
             "supervisor": supervisor.available(),
             "steps": out,
         }
+
+    # ------------------------------------------------------------ progress
+    def _summarise(self, out: list[dict], ignored: set[str], now: float | None = None) -> dict:
+        """Progress bar, broken steps and the overview card.
+
+        - Ignored steps don't count: the bar is 100 % when every other step is done.
+        - A step that worked before and has been failing for BROKEN_GRACE is broken
+          (a red segment). Within the grace period it still counts as done.
+        - The overview card hides itself after AUTO_HIDE_AFTER at 100 %, or when the
+          user hides it; it comes back as soon as something new breaks.
+        """
+        now = time.time() if now is None else now
+        w = self.wstate
+        ever_ok = set(w["ever_ok"])
+        since = w["nonok_since"]
+        dirty = False
+        segments, broken = [], []
+        for step in out:
+            sid, raw = step["id"], step["status"]
+            if raw == "ok":
+                if sid not in ever_ok:
+                    ever_ok.add(sid)
+                    dirty = True
+                if since.pop(sid, None) is not None:
+                    dirty = True
+            elif sid in ever_ok and sid not in since:
+                since[sid] = int(now)
+                dirty = True
+            is_broken = sid in ever_ok and raw != "ok" and now - since.get(sid, now) >= BROKEN_GRACE
+            if sid in ignored:
+                step["ignored"] = True
+                continue
+            if is_broken:
+                step["broken"] = True
+                step["broken_since"] = since[sid]
+                broken.append(sid)
+                state = "broken"
+            elif raw == "ok" or sid in ever_ok:
+                state = "ok"  # ok, or recovering within the grace period
+            elif raw == "fail":
+                state = "fail"
+            elif raw == "warn":
+                state = "warn"
+            else:
+                state = "todo"
+            segments.append({"id": sid, "state": state})
+        done = sum(1 for seg in segments if seg["state"] == "ok")
+        total = len(segments)
+        progress = 100 if not total else (100 * done // total if done < total else 100)
+        complete = progress == 100
+
+        if complete and not w.get("complete_since"):
+            w["complete_since"] = int(now)
+            dirty = True
+        elif not complete and w.get("complete_since"):
+            w["complete_since"] = None
+            dirty = True
+        hidden = w.get("overview_hidden")
+        if hidden and set(broken) - set(hidden.get("broken", [])):
+            w["overview_hidden"] = hidden = None  # something new broke: show the card again
+            dirty = True
+        auto_hidden = bool(complete and w.get("complete_since") and now - w["complete_since"] >= AUTO_HIDE_AFTER)
+        if dirty:
+            w["ever_ok"] = sorted(ever_ok)
+            save_state(self.app.manager.state)
+        return {
+            "progress": progress,
+            "done": done,
+            "total": total,
+            "segments": segments,
+            "broken": broken,
+            "ignored": sorted(ignored),
+            "overview": {
+                "visible": not hidden and not auto_hidden,
+                "hidden_by_user": bool(hidden),
+                "auto_hidden": auto_hidden,
+                "complete_since": w.get("complete_since"),
+                "auto_hide_after": AUTO_HIDE_AFTER,
+            },
+        }
+
+    def set_overview_hidden(self, hidden: bool, broken: list[str]) -> None:
+        self.wstate["overview_hidden"] = {"at": int(time.time()), "broken": sorted(broken)} if hidden else None
+        # "Show again" after an automatic hide: restart the one-hour timer.
+        if not hidden and self.wstate.get("complete_since"):
+            self.wstate["complete_since"] = int(time.time())
+        save_state(self.app.manager.state)
+
+    # ------------------------------------------------------------ monitoring
+    async def monitor(self) -> None:
+        """Background check: keeps the progress history current and reports a
+        certificate that is not renewed on time as a Home Assistant notification."""
+        result = await self.evaluate()
+        cert = next(s for s in result["steps"] if s["id"] == "certificate")
+        renewal = cert["data"].get("renewal") or {}
+        problem = next((i for i in cert["issues"] if i.startswith("cert_renewal_") or i == "cert_not_loaded"), None)
+        if cert.get("ignored") or self.opts.tls_mode != "ha_certificate":
+            problem = None
+        key = f"{problem}:{renewal.get('expires')}" if problem else None
+        if key == self.wstate.get("cert_notified"):
+            return
+        if problem:
+            lang = await asyncio.to_thread(supervisor.core_language)
+            title, message = cert_notification(problem, renewal, cert["data"], lang)
+            await asyncio.to_thread(supervisor.notify, CERT_NOTIFICATION, title, message)
+            log.warning("Certificate: %s", message.replace("\n", " "))
+        elif self.wstate.get("cert_notified"):
+            await asyncio.to_thread(supervisor.dismiss, CERT_NOTIFICATION)
+            log.info("Certificate renewed on time again: notification removed")
+        self.wstate["cert_notified"] = key
+        save_state(self.app.manager.state)
 
     # ------------------------------------------------------------ port test
     def start_port_test(self, mode: str) -> dict:
@@ -465,13 +597,15 @@ class Wizard:
         self.wstate["answers"][key] = value
         save_state(self.app.manager.state)
 
-    def skip(self, step: str, skipped: bool) -> None:
+    def ignore(self, step: str, ignored: bool) -> None:
         if step not in STEP_ORDER:
             raise ValueError(f"Unknown step {step}")
-        current = set(self.wstate["skipped"])
-        current.add(step) if skipped else current.discard(step)
-        self.wstate["skipped"] = sorted(current)
+        current = set(self.wstate["ignored"])
+        current.add(step) if ignored else current.discard(step)
+        self.wstate["ignored"] = sorted(current)
         save_state(self.app.manager.state)
+
+    skip = ignore  # API before 0.12
 
     def mark(self, flag: str) -> None:
         self.wstate[flag] = True
@@ -530,3 +664,51 @@ class Wizard:
     async def _restart(self) -> None:
         log.info("Options changed by the setup wizard: restarting the app")
         await asyncio.to_thread(supervisor.restart_self)
+
+
+def _date(ts: int | None, lang: str) -> str:
+    if not ts:
+        return "?"
+    d = time.localtime(ts)
+    return time.strftime("%d-%m-%Y" if lang.startswith("nl") else "%Y-%m-%d", d)
+
+
+def cert_notification(problem: str, renewal: dict, data: dict, lang: str) -> tuple[str, str]:
+    """Title and text of the Home Assistant notification about the certificate."""
+    nl = lang.startswith("nl")
+    file = renewal.get("file") or data.get("certfile") or "?"
+    expires = _date(renewal.get("expires"), lang)
+    due = _date(renewal.get("due"), lang)
+    le_app = next((p for p in data.get("providers") or [] if p.get("kind") == "letsencrypt"), None)
+    if problem == "cert_not_loaded":
+        if nl:
+            return "Headscale: oud certificaat in gebruik", (
+                f"Het certificaat /ssl/{file} is vernieuwd, maar Headscale gebruikt nog het oude "
+                f"(geldig tot {_date(data.get('served_expires'), lang)}). Herstart de Headscale-app."
+            )
+        return "Headscale: old certificate in use", (
+            f"The certificate /ssl/{file} was renewed, but Headscale still serves the old one "
+            f"(valid until {_date(data.get('served_expires'), lang)}). Restart the Headscale app."
+        )
+    critical = problem == "cert_renewal_critical"
+    if nl:
+        hint = (
+            "Start de Let's Encrypt-app en bekijk zijn logboek. Laat een automatisering hem elke week starten."
+            if le_app
+            else "Controleer de app die het certificaat maakt (Let's Encrypt of Duck DNS) en zijn logboek."
+        )
+        head = "verloopt binnenkort" if critical else "is niet op tijd vernieuwd"
+        return f"Headscale: certificaat {head}", (
+            f"/ssl/{file} verloopt op {expires}. Normaal wordt het rond {due} vernieuwd; dat is nog niet gebeurd. "
+            f"Na het verlopen kunnen je apparaten Headscale niet meer bereiken.\n\n{hint}"
+        )
+    hint = (
+        "Start the Let's Encrypt app and check its log. Let an automation start it every week."
+        if le_app
+        else "Check the app that creates the certificate (Let's Encrypt or Duck DNS) and its log."
+    )
+    head = "expires soon" if critical else "was not renewed on time"
+    return f"Headscale: certificate {head}", (
+        f"/ssl/{file} expires on {expires}. It is normally renewed around {due}; that has not happened yet. "
+        f"Once it expires, your devices can no longer reach Headscale.\n\n{hint}"
+    )
