@@ -15,7 +15,7 @@ import time
 
 from aiohttp import web
 
-from . import __version__, hs, ipp, paths, printers, supervisor
+from . import __version__, hs, ipp, paths, printers, services, supervisor
 from .manager import Manager
 from .options import load
 from .store import read_json
@@ -320,6 +320,71 @@ class App:
         except (TimeoutError, OSError) as exc:
             return web.json_response({"ok": False, "error": str(exc) or "timeout"})
 
+    # -------------------------------------------------------------- services
+    def _service_view(self, svc: dict) -> dict:
+        fqdn = f"{svc['slug']}.{self.opts.base_domain}"
+        ports = set(svc.get("ports") or [])
+        urls: dict[str, str] = {}
+        if svc["kind"] == "unifi":
+            urls["app"] = f"https://{fqdn}"
+            urls["rtsps"] = f"rtsps://{fqdn}:7441/<token>?enableSrtp"
+            urls["rtsp"] = f"rtsp://{fqdn}:7447/<token>"
+        elif svc["kind"] == "prusa":
+            if svc.get("prusalink") or 80 in ports:
+                urls["web"] = f"http://{fqdn}"
+            if svc.get("camera") or 554 in ports:
+                urls["camera"] = f"rtsp://{fqdn}/live"
+        elif svc["kind"] == "plex":
+            port = next(iter(sorted(ports)), 32400)
+            urls["custom"] = f"http://{fqdn}:{port}"
+            urls["web"] = f"http://{fqdn}:{port}/web"
+        return {**svc, "fqdn": fqdn, "urls": urls}
+
+    async def services_list(self, request: web.Request) -> web.Response:
+        kind = request.query.get("kind")
+        items = [s for s in self.manager.state.get("services", []) if not kind or s["kind"] == kind]
+        return web.json_response(
+            {
+                "services": [self._service_view(s) for s in items],
+                "networks": [str(n) for n in self.manager.lan_networks()],
+            }
+        )
+
+    async def services_scan(self, request: web.Request) -> web.Response:
+        kind = (await request.json()).get("kind")
+        found = await services.scan(str(kind), self.manager.lan_networks())
+        added = {(s["kind"], s["ip"]) for s in self.manager.state.get("services", [])}
+        for f in found:
+            f["added"] = (f["kind"], f["ip"]) in added
+        return web.json_response({"found": found})
+
+    async def services_add(self, request: web.Request) -> web.Response:
+        return web.json_response(self._service_view(await self.manager.add_service(await request.json())))
+
+    async def services_delete(self, request: web.Request) -> web.Response:
+        if not await self.manager.remove_service(request.match_info["id"]):
+            raise web.HTTPNotFound()
+        return web.json_response({"ok": True})
+
+    def _find_service(self, service_id: str) -> dict:
+        svc = next((s for s in self.manager.state.get("services", []) if s["id"] == service_id), None)
+        if svc is None:
+            raise web.HTTPNotFound()
+        return svc
+
+    async def services_test(self, request: web.Request) -> web.Response:
+        svc = self._find_service(request.match_info["id"])
+        svc["last_test"] = await services.test(svc)
+        from .store import save_state
+
+        save_state(self.manager.state)
+        return web.json_response(self._service_view(svc))
+
+    async def services_share(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        svc = await self.manager.set_shared(request.match_info["id"], bool(body.get("shared")))
+        return web.json_response(self._service_view(svc))
+
     # ------------------------------------------------------------------ app
     async def index(self, _request: web.Request) -> web.FileResponse:
         return web.FileResponse(paths.WWW / "index.html", headers={"Cache-Control": "no-cache"})
@@ -345,6 +410,12 @@ class App:
         app.router.add_get("/api/qr", self.qr)
         app.router.add_get("/api/update", self.update_get)
         app.router.add_post("/api/update", self.update_post)
+        app.router.add_get("/api/services", self.services_list)
+        app.router.add_post("/api/services/scan", self.services_scan)
+        app.router.add_post("/api/services", self.services_add)
+        app.router.add_delete("/api/services/{id}", self.services_delete)
+        app.router.add_post("/api/services/{id}/test", self.services_test)
+        app.router.add_post("/api/services/{id}/share", self.services_share)
         app.router.add_get("/api/printers", self.printers_list)
         app.router.add_post("/api/printers/scan", self.printers_scan)
         app.router.add_post("/api/printers", self.printers_add)

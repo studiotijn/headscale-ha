@@ -42,6 +42,7 @@ def load_state() -> dict:
 
     state = read_json(paths.STATE, {})
     state.setdefault("printers", [])
+    state.setdefault("services", [])
     return state
 
 

@@ -251,3 +251,38 @@ def test_dns_nameservers():
     assert dns_nameservers(o, None) == {"global": ["1.1.1.1", "9.9.9.9"], "split": {}}
     assert dns_nameservers(o, "100.64.0.1")["split"] == {"printers.home.arpa": ["100.64.0.1"]}
     assert dns_nameservers(opts(dns_via_home=True), "100.64.0.1")["global"] == ["100.64.0.1"]
+
+
+def test_hujson_and_shares():
+    from hsha.policy import apply_shares, strip_hujson
+
+    text = """// comment
+    {
+      "groups": {"group:admins": ["tijn@"],},  // trailing comma
+      /* block */ "acls": [
+        {"action": "accept", "src": ["group:admins"], "dst": ["*:*"]},
+        {"action": "accept", "src": ["autogroup:member"], "dst": ["hsha-old:80"]},
+      ],
+      "hosts": {"nas": "192.168.6.10/32", "hsha-old": "192.168.6.99/32"},
+      "note": "keep // this and /* this */",
+    }"""
+    pol = json.loads(strip_hujson(text))
+    assert pol["note"] == "keep // this and /* this */"
+    new = apply_shares(pol, [{"slug": "plex", "ip": "192.168.6.20", "ports": [32400]}])
+    assert new["hosts"] == {"nas": "192.168.6.10/32", "hsha-plex": "192.168.6.20/32"}
+    assert {"action": "accept", "src": ["group:admins"], "dst": ["*:*"]} in new["acls"]
+    assert {"action": "accept", "src": ["autogroup:member"], "dst": ["hsha-plex:32400"]} in new["acls"]
+    assert not any("hsha-old" in str(a) for a in new["acls"])
+    assert "hosts" not in apply_shares({"acls": []}, [])
+
+
+def test_make_service_and_fingerprint():
+    from hsha.services import _prusa_fingerprint, make_service
+
+    s = make_service({"kind": "plex", "ip": " 192.168.6.20 ", "name": "Plex"}, {"plex"})
+    assert s["slug"] == "plex-2" and s["ports"] == [32400] and s["ip"] == "192.168.6.20"
+    with pytest.raises(ValueError):
+        make_service({"kind": "nas", "ip": "1.2.3.4"}, set())
+    assert _prusa_fingerprint({"Server": "PrusaLink"}, "") == "PrusaLink"
+    assert _prusa_fingerprint({}, "<title>Buddy3D</title>") == "Buddy3D camera"
+    assert _prusa_fingerprint({}, "<title>Router</title>") is None

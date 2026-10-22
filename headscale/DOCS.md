@@ -60,8 +60,7 @@ On your router, forward to the IP of the Home Assistant host:
 | `stun_port` (3478) | `stun_port` | UDP | DERP/STUN (NAT traversal) |
 | 41641 | 41641 | UDP | optional: direct connections to the subnet router |
 
-**Don't** forward the Headplane port (3000) or Home Assistant's 8123. Once everything works,
-close any existing 8123 forward: you reach Home Assistant through the tailnet now.
+**Don't** forward the Headplane port (3000).
 
 At home your devices resolve `hs.yourname.duckdns.org` to your public IP. If your router doesn't
 support NAT loopback (hairpinning), add a local DNS override that points that name to the
@@ -124,6 +123,13 @@ normal print menu.
 
 `dns_via_home` sends **all** DNS of tailnet devices to Home Assistant, which gives ad blocking
 on the road. When home is down, DNS stops working on the road.
+
+## Home network devices
+
+The **Home network** tab has assistants for UniFi Protect, a Prusa printer/camera and Plex.
+Each one finds the device, gives it a name such as `plex.tailnet.home`, tests the ports and
+explains the settings in the device or app. *Share with all tailnet users* opens only that
+device and its ports to every user of your tailnet. Admins always have access.
 
 ## Security
 

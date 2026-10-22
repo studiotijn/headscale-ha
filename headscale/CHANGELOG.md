@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+- **Home network tab** with three separate assistants. Each one searches, adds the device
+  under a fixed MagicDNS name, tests every port and explains how to use it:
+  - **UniFi Protect:** finds the console by its Protect stream ports (7441/7447). Through the VPN
+    the Protect app connects to the console directly; RTSP(S) links for VLC/Frigate.
+  - **Prusa 3D printer + camera:** finds PrusaLink (web UI) and RTSP cameras such as the
+    Buddy3D (`rtsp://<name>/live`).
+  - **Plex:** finds servers with Plex's own GDM discovery and a port scan, and checks `/identity`.
+    It gives the *Custom server access URL*. Traffic through the subnet router counts as local
+    for Plex.
+- **Share with all tailnet users:** per device, adds an ACL rule for only that device and its
+  ports (managed `hsha-*` host aliases).
+- The wizard step *Close port 8123* has been removed.
+
 ## 0.4.0
 
 - **AirPrint via VPN (experimental, off by default):** iPhones, iPads and Macs find the added

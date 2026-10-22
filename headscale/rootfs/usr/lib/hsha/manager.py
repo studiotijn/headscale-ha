@@ -53,7 +53,7 @@ class Manager:
     def printer_routes(self) -> list[str]:
         nets = [ipaddress.ip_network(r, strict=False) for r in self.lan_routes()]
         out = []
-        for p in self.state["printers"]:
+        for p in self.state["printers"] + self.state.get("services", []):
             ip = ipaddress.ip_address(p["ip"])
             if not any(ip in n for n in nets):
                 out.append(f"{ip}/32")
@@ -207,7 +207,7 @@ class Manager:
         kept = [r for r in records if r.get("name") not in managed_before]
         ours = [
             {"name": f"{p['slug']}.{self.opts.base_domain}", "type": "A", "value": p["ip"]}
-            for p in self.state["printers"]
+            for p in self.state["printers"] + self.state.get("services", [])
         ]
         names = {r["name"] for r in ours}
         kept = [r for r in kept if r.get("name") not in names]
@@ -266,6 +266,58 @@ class Manager:
                 save_state(self.state)
         self.poke()
         return changed
+
+    # -------------------------------------------------------------- services
+    def all_slugs(self, exclude_id: str | None = None) -> set[str]:
+        items = self.state["printers"] + self.state.get("services", [])
+        return {i["slug"] for i in items if i.get("id") != exclude_id}
+
+    async def add_service(self, data: dict) -> dict:
+        from .services import make_service
+
+        async with self._lock:
+            services = self.state.setdefault("services", [])
+            svc = make_service(data, self.all_slugs())
+            services[:] = [s for s in services if not (s["ip"] == svc["ip"] and s["kind"] == svc["kind"])]
+            services.append(svc)
+            self.write_dns_records()
+            save_state(self.state)
+        self.poke()
+        return svc
+
+    async def remove_service(self, service_id: str) -> bool:
+        async with self._lock:
+            services = self.state.setdefault("services", [])
+            svc = next((s for s in services if s["id"] == service_id), None)
+            if not svc:
+                return False
+            services.remove(svc)
+            if svc.get("shared"):
+                await self._write_shares()
+            self.write_dns_records()
+            save_state(self.state)
+        self.poke()
+        return True
+
+    async def set_shared(self, service_id: str, shared: bool) -> dict:
+        async with self._lock:
+            svc = next((s for s in self.state.get("services", []) if s["id"] == service_id), None)
+            if not svc:
+                raise KeyError("unknown service")
+            svc["shared"] = bool(shared)
+            await self._write_shares()
+            save_state(self.state)
+        return svc
+
+    async def _write_shares(self) -> None:
+        import json as _json
+
+        from .policy import apply_shares, dump, strip_hujson
+
+        current = await hs.get_policy() or "{}"
+        policy = _json.loads(strip_hujson(current))
+        shared = [s for s in self.state.get("services", []) if s.get("shared")]
+        await hs.set_policy(dump(apply_shares(policy, shared)))
 
     # ------------------------------------------------------------------ loop
     def poke(self) -> None:

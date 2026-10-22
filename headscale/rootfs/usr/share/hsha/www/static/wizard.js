@@ -595,11 +595,6 @@ const BODIES = {
       el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => show("printers") }, t("open_printers")))].filter(Boolean);
   },
 
-  close8123(s) {
-    return [el("div", { class: "actions" }, s.status === "ok"
-      ? el("button", { class: "btn secondary small", type: "button", onclick: () => answer("close8123_done", false) }, t("fwd_undo"))
-      : el("button", { class: "btn", type: "button", onclick: () => answer("close8123_done", true) }, `✓ ${t("close_done")}`))];
-  },
 };
 
 function alternatives(items) {
@@ -670,7 +665,7 @@ function renderWizard() {
     const li = el("li", { class: `step ${s.status} ${open ? "open" : ""}` }, header, info);
     if (open) {
       const body = el("div", { class: "step-body" }, ...(BODIES[s.id](s) || []));
-      if (s.optional || ["external", "close8123"].includes(s.id)) {
+      if (s.optional || s.id === "external") {
         body.append(el("div", { class: "actions end" }, s.status === "skipped"
           ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, false) }, t("wiz_unskip"))
           : s.status !== "ok" ? el("button", { class: "btn secondary small", type: "button", onclick: () => skip(s.id, true) }, t("wiz_skip")) : ""));

@@ -44,9 +44,8 @@ ANSWERS = {
     "forwards_done": {True, False},
     "external_ok": {True, False},
     "proxy_ok": {True, False},
-    "close8123_done": {True, False},
 }
-OPTIONAL_STEPS = {"headplane", "printers", "airprint", "close8123"}
+OPTIONAL_STEPS = {"headplane", "printers", "airprint"}
 STEP_ORDER = [
     "certificate",
     "address",
@@ -58,7 +57,6 @@ STEP_ORDER = [
     "headplane",
     "printers",
     "airprint",
-    "close8123",
 ]
 
 
@@ -349,12 +347,6 @@ class Wizard:
                 "test": dns_test,
             },
         }
-        steps["close8123"] = {
-            "status": "ok" if answers.get("close8123_done") else "todo",
-            "issues": [],
-            "data": {},
-        }
-
         out = []
         for sid in STEP_ORDER:
             step = steps[sid]
