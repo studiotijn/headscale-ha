@@ -242,3 +242,9 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 ul.plain li { margin: 4px 0; }
 .porttest { border-top: 1px solid var(--border); padding-top: 12px; }
 .found li .actions { justify-content: flex-end; }
+
+/* Networks tab (multi-tenant) */
+nav button[hidden] { display: none; }
+.card h3 { font-size: 14px; font-weight: 500; margin: 16px 0 8px; }
+#networks .note { margin: 8px 0; }
+#networks pre.mono { white-space: pre-wrap; max-height: 420px; overflow: auto; }

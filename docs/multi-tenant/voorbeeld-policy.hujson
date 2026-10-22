@@ -1,0 +1,72 @@
+// GEGENEREERD door de Headscale-app (multi-tenant modus). Niet handmatig wijzigen:
+// wijzigingen via het paneel Netwerken / Verbindingen. Model-revisie: 7, sha256: <hash>
+{
+  "groups": {
+    "group:admins": ["tijn@"]
+  },
+
+  // Één tag per rol per domein; alleen admins mogen tags toekennen.
+  "tagOwners": {
+    "tag:homerouter":      ["group:admins"],
+    "tag:private-server":  ["group:admins"],
+    "tag:dynteq-server":   ["group:admins"],
+    "tag:srs-loc01-edge":  ["group:admins"],
+    "tag:srs-loc02-edge":  ["group:admins"]
+  },
+
+  // Namen voor IP's/subnetten. Tailnet-IP's van bronapparaten worden door de app
+  // bijgehouden op basis van node-ID (Headscale wijst vaste IP's toe).
+  "hosts": {
+    "private-lan":       "192.168.1.0/24",
+    "pc-thuis":          "100.64.0.5/32",
+    "pc-werk":           "100.64.0.9/32",
+    "srs-loc01-lan":     "10.81.1.0/24",
+    "srs-loc01-plc":     "10.81.1.10/32",
+    "srs-loc01-hmi":     "10.81.1.20/32",
+    "srs-loc02-lan":     "10.81.2.0/24",
+    "srs-loc02-plc":     "10.81.2.10/32",
+    "srs-loc01-overig":  "10.81.1.99/32",
+    "ha-host":           "192.168.1.10/32"
+  },
+
+  // Een Edgebox mag uitsluitend het subnet van zijn eigen locatie aanbieden.
+  "autoApprovers": {
+    "routes": {
+      "192.168.1.0/24": ["tag:homerouter"],
+      "10.81.1.0/24":   ["tag:srs-loc01-edge"],
+      "10.81.2.0/24":   ["tag:srs-loc02-edge"]
+    }
+  },
+
+  "grants": [
+    // --- Domein Private (intern beleid) ---
+    {"src": ["tijn@"], "dst": ["tijn@", "tag:homerouter", "tag:private-server", "private-lan"], "ip": ["*"]},
+
+    // --- Domein Dynteq (intern beleid) ---
+    {"src": ["dynteq@"], "dst": ["dynteq@", "tag:dynteq-server"], "ip": ["*"]},
+
+    // --- Domein SRS/SHP: geen regels = locaties en Edgeboxes kunnen niets initiëren ---
+
+    // --- Verbinding V1: Private/pc-thuis -> SRS loc01 PLC + HMI ---
+    {"src": ["pc-thuis"], "dst": ["srs-loc01-plc"], "ip": ["tcp:502", "tcp:443"]},
+    {"src": ["pc-thuis"], "dst": ["srs-loc01-hmi"], "ip": ["tcp:443", "tcp:5900"]},
+
+    // --- Verbinding V2: Dynteq/pc-werk -> SRS loc01 PLC ---
+    {"src": ["pc-werk"], "dst": ["srs-loc01-plc"], "ip": ["tcp:502"]},
+
+    // --- Verbinding V3: beheer Edgeboxes vanaf pc-thuis (SSH) ---
+    {"src": ["pc-thuis"], "dst": ["tag:srs-loc01-edge", "tag:srs-loc02-edge"], "ip": ["tcp:22"]}
+  ],
+
+  // Verkeersmatrix als controleerbare tests: Headscale weigert een policy waarvan
+  // een test faalt, dus een fout in de generator komt nooit live.
+  "tests": [
+    {"src": "pc-thuis", "accept": ["srs-loc01-plc:502", "srs-loc01-hmi:443"],
+                        "deny":   ["srs-loc01-plc:22", "srs-loc02-plc:502", "srs-loc01-overig:80"]},
+    {"src": "pc-werk",  "accept": ["srs-loc01-plc:502"],
+                        "deny":   ["srs-loc01-hmi:443", "srs-loc02-plc:502", "ha-host:445", "pc-thuis:3389"]},
+    {"src": "pc-thuis", "deny":   ["pc-werk:3389", "pc-werk:445"]},
+    {"src": "srs-loc01-plc", "deny": ["pc-thuis:3389", "pc-werk:3389", "ha-host:8123", "srs-loc02-plc:502"]},
+    {"src": "srs-loc02-plc", "deny": ["srs-loc01-plc:502", "ha-host:8123"]}
+  ]
+}

@@ -15,6 +15,7 @@
       <button role="tab" data-tab="devices" data-i18n="tab_devices">Devices</button>
       <button role="tab" data-tab="printers" data-i18n="tab_printers">Printers</button>
       <button role="tab" data-tab="home" data-i18n="tab_home">Home network</button>
+      <button role="tab" data-tab="networks" data-i18n="tab_networks" id="tab-btn-networks" hidden>Networks</button>
     </nav>
   </header>
 
@@ -108,6 +109,11 @@
       </article>
     </section>
 
+    <!-- Multi-tenant networks (option multi_tenant) -->
+    <section id="tab-networks" class="tab" hidden>
+      <div id="networks"></div>
+    </section>
+
     <!-- Home network assistants -->
     <section id="tab-home" class="tab" hidden>
       <div id="home"></div>
@@ -175,6 +181,7 @@
   <div id="overlay" class="overlay" hidden><div class="overlay-box"><div class="spinner"></div><p id="overlay-text"></p></div></div>
   <script src="static/app.js"></script>
   <script src="static/services.js"></script>
+  <script src="static/tenancy.js"></script>
   <script src="static/wizard.js"></script>
 </body>
 </html>

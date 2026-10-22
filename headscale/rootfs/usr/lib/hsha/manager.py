@@ -34,6 +34,11 @@ class Manager:
         self._lock = asyncio.Lock()
         self._wake = asyncio.Event()
         self.lan = supervisor.lan_interfaces()
+        self.mt = None
+        if opts.multi_tenant:
+            from .multitenant import MultiTenant
+
+            self.mt = MultiTenant(self)
 
     # ---------------------------------------------------------------- routes
     def lan_networks(self) -> list[ipaddress.IPv4Network]:
@@ -356,6 +361,11 @@ class Manager:
 
         from .policy import apply_shares, dump, strip_hujson
 
+        if self.mt is not None and self.mt.model.get("activated"):
+            # Multi-tenant mode: the generated policy includes the shares (for the home
+            # domain only); the manager loop re-applies it.
+            self.poke()
+            return
         current = await hs.get_policy() or "{}"
         policy = _json.loads(strip_hujson(current))
         shared = [s for s in self.state.get("services", []) if s.get("shared")]
@@ -386,6 +396,8 @@ class Manager:
                 await self.watch_certificate()
                 await self.reconcile_router()
                 await self.reconcile_remote_routes()
+                if self.mt is not None:
+                    await self.mt.reconcile()
                 self.error = None
             except Exception as exc:
                 self.error = str(exc)

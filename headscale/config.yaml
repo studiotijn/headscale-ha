@@ -1,6 +1,6 @@
 # https://contributors.home-assistant.io/apps/reference/configuration/
 name: Headscale
-version: "0.6.0"
+version: "0.7.0"
 slug: headscale
 description: >-
   Self-hosted Tailscale control server (Headscale) with DERP relay, subnet router,
@@ -61,6 +61,7 @@ options:
   headplane_port: 3000
   airprint_dns: false
   dns_via_home: false
+  multi_tenant: false
   printer_domain: printers.home.arpa
   log_level: info
 schema:
@@ -89,5 +90,6 @@ schema:
   headplane_port: port
   airprint_dns: bool
   dns_via_home: bool
+  multi_tenant: bool
   printer_domain: match(^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$)
   log_level: list(trace|debug|info|warn|error)

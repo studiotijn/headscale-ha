@@ -37,7 +37,7 @@ def dns_nameservers(opts: Options, router_ip: str | None) -> dict:
     global_ns = list(opts.nameservers or ["1.1.1.1"])
     split: dict[str, list[str]] = {}
     if router_ip:
-        if opts.dns_via_home:
+        if opts.dns_via_home and not opts.raw.get("multi_tenant"):
             global_ns = [router_ip]
         if opts.airprint_dns:
             split[opts.printer_domain] = [router_ip]

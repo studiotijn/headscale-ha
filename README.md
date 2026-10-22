@@ -9,6 +9,9 @@ A Home Assistant app (add-on) repository with a complete, self-hosted
 - **[Headplane](https://github.com/tale/headplane)** admin UI on the LAN
 - **Sidebar panel**: status, devices, auth keys, approving phone sign-ins, and
   **printer discovery** so you can print at home from anywhere
+- **Optional multi-tenant mode**: separated network domains (home, work, clients with Edgebox
+  sites) in one Headscale, with explicit connections, a generated and tested ACL policy and
+  Edgebox firewall rules
 
 ## Installation
 
@@ -39,6 +42,9 @@ pip install -r headscale/requirements.txt pytest ruff
 ruff check . && pytest
 docker build -t headscale-ha:test headscale && tests/smoke.sh headscale-ha:test
 ```
+
+`tests/edge_dataplane.sh` checks the generated Edgebox firewall (NAT + allowlist) in a network
+namespace (`sudo tests/edge_dataplane.sh` where unprivileged user namespaces are blocked).
 
 `tests/fake_printer.py` simulates an IPP printer announced over mDNS.
 

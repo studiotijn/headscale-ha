@@ -36,7 +36,9 @@ async def run(*args: str, json_output: bool = True, timeout: float = 30) -> Any:
     text = out.decode().strip()
     if proc.returncode != 0:
         msg = (err.decode().strip() or text or f"exit code {proc.returncode}").splitlines()
-        raise HeadscaleError(f"headscale {' '.join(args)}: {msg[-1] if msg else ''}")
+        # Policy errors list every failed test on its own line; keep them.
+        detail = "\n".join(msg[-15:]) if args and args[0] == "policy" else (msg[-1] if msg else "")
+        raise HeadscaleError(f"headscale {' '.join(args)}: {detail}")
     if not json_output:
         return text
     if not text:
@@ -138,6 +140,21 @@ async def get_policy() -> str | None:
             return None
         raise
     return text or None
+
+
+async def policy_check(policy_text: str) -> dict:
+    """Validate a policy (including its tests) against the running server without applying it."""
+    fd, tmp = tempfile.mkstemp(suffix=".hujson", dir=str(paths.RUN))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(policy_text)
+        try:
+            out = await run("policy", "check", "--file", tmp, json_output=False)
+            return {"ok": True, "message": out or "Policy is valid"}
+        except HeadscaleError as exc:
+            return {"ok": False, "message": str(exc)}
+    finally:
+        os.unlink(tmp)
 
 
 async def set_policy(policy_text: str) -> None:

@@ -29,6 +29,7 @@ DEFAULTS = {
     "headplane_port": 3000,
     "airprint_dns": False,
     "dns_via_home": False,
+    "multi_tenant": False,
     "printer_domain": "printers.home.arpa",
     "log_level": "info",
 }
@@ -84,6 +85,11 @@ class Options:
         out = []
         if not self.derp_enabled and self.tailscale_derp_fallback:
             out.append("Embedded DERP disabled: relayed traffic goes through Tailscale's public DERP servers.")
+        if self.raw.get("multi_tenant") and self.dns_via_home:
+            out.append(
+                "dns_via_home is ignored in multi-tenant mode: it would send the DNS of every domain "
+                "(work, clients) to your home network."
+            )
         return out
 
     def validate(self) -> None:

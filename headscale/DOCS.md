@@ -148,6 +148,44 @@ Each one finds the device, gives it a name such as `plex.tailnet.home`, tests th
 explains the settings in the device or app. *Share with all tailnet users* opens only that
 device and its ports to every user of your tailnet. Admins always have access.
 
+## Multi-tenant networks (optional)
+
+With the option `multi_tenant` one Headscale manages several **separated network domains**,
+for example *Private* (home), *Dynteq* (work) and a client such as *SRS/SHP* with several sites.
+Off by default; with the option off nothing below changes.
+
+- **Domains.** A domain owns Headscale users (its people's laptops and phones) and tagged
+  servers (`tag:<domain>-server`). Your existing `admin_user` becomes the *Private* domain, so
+  existing devices keep working. Devices of different domains cannot reach each other.
+- **Locations** (client sites). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
+  behind the local router (e.g. a Teltonika RUTX50). All sites may use the *same* local subnet
+  (e.g. `172.168.1.0/24`, the default of Seyond LiDARs): the Edgebox maps it 1:1 onto a unique
+  VPN subnet, so local `172.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
+  has no 4via6, so this mapping is what makes identical sites possible.
+- **Connections.** Only explicit connections are allowed: from a device or all users of a
+  domain, to a device at a site, a whole site subnet, the Edgebox itself (SSH) or a device in
+  another domain, on given ports (`tcp:22`, `udp:2368`, `tcp:8000-8010`, `icmp`, `*`). Replies
+  come back; nothing at a site can start a connection, and a client domain can never be a
+  source towards another domain (the app refuses such a connection).
+- **Apply.** Changes are pending until you press *Apply* (the first time: *Activate*; the hand-made
+  policy is kept in `/data/hsha/policy-history/`). The app generates the whole ACL policy,
+  including a `tests` block with the isolation rules; Headscale refuses a policy whose tests fail.
+  Device changes (a new laptop for a client user) are re-applied automatically.
+- **Edgebox.** *Locations → Edgebox key* gives a one-time `tailscale up` command with the right tag
+  and route; *Firewall (nftables)* gives the NAT and an allowlist that only forwards the
+  configured connections. Load it with `nft -f`, enable `net.ipv4.ip_forward`, and give the Edgebox
+  its own firewall zone on the RUTX50. Download the firewall again after changing connections and
+  run `conntrack -D -s 100.64.0.0/10` after revoking access.
+- **Routes.** An Edgebox may only have the VPN subnet of its own location approved; anything else is
+  withdrawn automatically and logged. Other unexpected routes show up as warnings.
+- **Log.** Every change and applied policy is written to `/data/hsha/audit.jsonl` (in backups).
+- **Policy owner.** In this mode the app owns the ACL policy. Changes made in Headplane are reported
+  as drift and replaced on the next *Apply*. *Share* in the Home network tab and printers
+  elsewhere apply to the Private domain only.
+- `dns_via_home` is ignored in this mode (it would send the DNS of work and client devices home).
+  Devices that use routes to sites need *accept routes* (`tailscale set --accept-routes`, default
+  on Windows/macOS/mobile).
+
 ## Security
 
 - Headscale is the key to your network: whoever controls it can add devices that reach your LAN.

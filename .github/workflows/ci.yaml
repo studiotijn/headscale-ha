@@ -29,8 +29,21 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r headscale/requirements.txt pytest ruff
+      - name: Headscale binary (policy check in the tests), same version as the Dockerfile
+        run: |
+          v=$(sed -n 's/^ARG HEADSCALE_VERSION=//p' headscale/Dockerfile)
+          sha=$(sed -n 's/^ARG HEADSCALE_SHA256_AMD64=//p' headscale/Dockerfile)
+          mkdir -p "$HOME/bin"
+          curl -fsSL -o "$HOME/bin/headscale" \
+            "https://github.com/juanfont/headscale/releases/download/v${v}/headscale_${v}_linux_amd64"
+          echo "${sha}  $HOME/bin/headscale" | sha256sum -c -
+          chmod +x "$HOME/bin/headscale"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y -q nftables
       - run: ruff check . && ruff format --check .
       - run: pytest -q
+      - name: Edgebox firewall data-plane test
+        run: sudo env "PATH=$PATH" tests/edge_dataplane.sh
 
   shellcheck:
     name: Shellcheck

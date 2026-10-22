@@ -63,6 +63,10 @@ configuration:
   dns_via_home:
     name: All DNS via home
     description: Send all DNS queries of tailnet devices to this Home Assistant (e.g. AdGuard Home). DNS stops working on the road when home is down.
+  multi_tenant:
+    name: Multi-tenant networks (optional)
+    description: >-
+      Manage several separated network domains (private, work, clients with Edgebox sites) in one Headscale. Access between domains is closed until you add a connection. After enabling: Networks tab → Activate. dns_via_home is then ignored.
   printer_domain:
     name: Printer domain
     description: DNS-SD domain for AirPrint, e.g. printers.home.arpa.

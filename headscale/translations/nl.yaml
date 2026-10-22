@@ -63,6 +63,10 @@ configuration:
   dns_via_home:
     name: Alle DNS via thuis
     description: Stuur alle DNS-vragen van tailnet-apparaten naar deze Home Assistant (bijv. AdGuard Home). Onderweg werkt DNS dan niet als thuis plat ligt.
+  multi_tenant:
+    name: Multi-tenant netwerken (optioneel)
+    description: >-
+      Beheer meerdere gescheiden netwerkdomeinen (privé, werk, klanten met Edgebox-locaties) in één Headscale. Toegang tussen domeinen staat dicht tot je een verbinding toevoegt. Na aanzetten: tabblad Netwerken → Activeren. dns_via_home wordt dan genegeerd.
   printer_domain:
     name: Printerdomein
     description: DNS-SD-domein voor AirPrint, bijv. printers.home.arpa.

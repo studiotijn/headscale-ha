@@ -106,6 +106,7 @@ class App:
                 "listen_port": o.listen_port,
                 "base_domain": o.base_domain,
                 "admin_user": o.admin_user,
+                "multi_tenant": self.manager.mt.status() if self.manager.mt else None,
                 "router": self.manager.router,
                 "lan_routes": self.manager.lan_routes(),
                 "headplane": {
@@ -131,7 +132,15 @@ class App:
             node = next((n for n in await hs.nodes() if int(n["id"]) == node_id), None)
             if node is None:
                 raise web.HTTPNotFound()
-            await hs.approve_routes(node_id, node.get("available_routes") or [])
+            routes = node.get("available_routes") or []
+            if self.manager.mt is not None:
+                # Only routes the model allows (an Edgebox may offer only its own location).
+                allowed = set(self.manager.mt.allowed_routes_for(node))
+                refused = sorted(set(routes) - allowed - {"0.0.0.0/0", "::/0"})
+                routes = sorted((set(routes) & allowed) | set(node.get("approved_routes") or []) & allowed)
+                if refused:
+                    log.warning("Not approving routes outside the model on node %s: %s", node_id, refused)
+            await hs.approve_routes(node_id, routes)
         else:
             raise web.HTTPNotFound()
         self.manager.poke()
@@ -142,9 +151,13 @@ class App:
         body = await request.json() if request.can_read_body else {}
         hours = max(1, min(int(body.get("hours", 1)), 24 * 7))
         reusable = bool(body.get("reusable", False))
-        user_id = self.manager.state.get("admin_user_id")
-        if user_id is None:
-            user_id = (await hs.ensure_user(self.opts.admin_user))["id"]
+        if self.manager.mt is not None:
+            name = self.manager.mt.user_for(body.get("domain"), body.get("user"))
+            user_id = (await hs.ensure_user(name))["id"]
+        else:
+            user_id = self.manager.state.get("admin_user_id")
+            if user_id is None:
+                user_id = (await hs.ensure_user(self.opts.admin_user))["id"]
         key = await hs.create_preauthkey(user_id=int(user_id), reusable=reusable, expiration=f"{hours}h")
         return web.json_response(
             {
@@ -168,7 +181,11 @@ class App:
         auth_id = match.group(1) if match else text
         if not re.fullmatch(r"[A-Za-z0-9_-]{6,128}", auth_id):
             raise ValueError("Not a valid auth ID")
-        await hs.register(auth_id, self.opts.admin_user)
+        user = self.opts.admin_user
+        if self.manager.mt is not None:
+            user = self.manager.mt.user_for(body.get("domain"), body.get("user"))
+            await hs.ensure_user(user)
+        await hs.register(auth_id, user)
         self.manager.poke()
         return web.json_response({"ok": True})
 
@@ -451,6 +468,87 @@ class App:
         svc = await self.manager.set_shared(request.match_info["id"], bool(body.get("shared")))
         return web.json_response(self._service_view(svc))
 
+    # ----------------------------------------------------------- multi-tenant
+    def _mt(self):
+        if self.manager.mt is None:
+            raise web.HTTPNotFound(text="Multi-tenant mode is off (app option multi_tenant)")
+        return self.manager.mt
+
+    @staticmethod
+    def _actor(request: web.Request) -> str:
+        h = request.headers
+        return h.get("X-Remote-User-Display-Name") or h.get("X-Remote-User-Name") or "ingress"
+
+    async def tenancy_get(self, _request: web.Request) -> web.Response:
+        from . import tenancy
+
+        mt = self._mt()
+        nodes = await hs.nodes()
+        view = []
+        for n in nodes:
+            item = _node(n)
+            item["domain"] = tenancy.node_domain(mt.model, n)
+            item["location"] = tenancy.node_location(mt.model, n)
+            item["ipv4"] = tenancy.node_ipv4(n)
+            view.append(item)
+        devices = []
+        for d in mt.model["devices"]:
+            loc = tenancy.location(mt.model, d["location"])
+            devices.append({**d, "vpn_ip": str(tenancy.vpn_ip(loc, d["ip"])) if loc else None})
+        locations = []
+        for loc in mt.model["locations"]:
+            edge = tenancy.edge_node(mt.model, loc, nodes)
+            locations.append(
+                {
+                    **loc,
+                    "tag": tenancy.edge_tag(loc),
+                    "edge": _node(edge) if edge else None,
+                    "route_approved": bool(edge and loc["vpn_subnet"] in (edge.get("approved_routes") or [])),
+                }
+            )
+        return web.json_response(
+            {
+                "model": {**mt.model, "devices": devices, "locations": locations},
+                "status": mt.status(),
+                "nodes": view,
+                "server_url": self.opts.server_url_clean,
+            }
+        )
+
+    async def tenancy_change(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        body = await request.json()
+        await mt.change(request.match_info["kind"], request.match_info["action"], body, self._actor(request))
+        return web.json_response({"ok": True, "status": mt.status()})
+
+    async def tenancy_preview(self, _request: web.Request) -> web.Response:
+        return web.json_response(await self._mt().preview())
+
+    async def tenancy_apply(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        applied = await mt.apply(self._actor(request))
+        self.manager.poke()
+        return web.json_response({"ok": True, "applied": applied, "status": mt.status()})
+
+    async def tenancy_edge_key(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        return web.json_response(await mt.edge_key(request.match_info["id"], self._actor(request)))
+
+    async def tenancy_edge_nft(self, request: web.Request) -> web.Response:
+        text = await self._mt().edge_nftables(request.match_info["id"])
+        name = f"hsha-edge-{request.match_info['id']}.nft"
+        return web.Response(
+            text=text,
+            content_type="text/plain",
+            headers={"Content-Disposition": f'inline; filename="{name}"'},
+        )
+
+    async def tenancy_audit(self, _request: web.Request) -> web.Response:
+        from . import audit
+
+        self._mt()
+        return web.json_response({"entries": audit.recent(100)})
+
     # ------------------------------------------------------------------ app
     async def index(self, _request: web.Request) -> web.FileResponse:
         return web.FileResponse(paths.WWW / "index.html", headers={"Cache-Control": "no-cache"})
@@ -482,6 +580,15 @@ class App:
         app.router.add_delete("/api/services/{id}", self.services_delete)
         app.router.add_post("/api/services/{id}/test", self.services_test)
         app.router.add_post("/api/services/{id}/share", self.services_share)
+        app.router.add_get("/api/tenancy", self.tenancy_get)
+        app.router.add_get("/api/tenancy/preview", self.tenancy_preview)
+        app.router.add_post("/api/tenancy/apply", self.tenancy_apply)
+        app.router.add_get("/api/tenancy/audit", self.tenancy_audit)
+        app.router.add_post("/api/tenancy/locations/{id}/key", self.tenancy_edge_key)
+        app.router.add_get("/api/tenancy/locations/{id}/nftables", self.tenancy_edge_nft)
+        app.router.add_post(
+            "/api/tenancy/{kind:domain|location|device|connection}/{action:create|update|delete}", self.tenancy_change
+        )
         app.router.add_get("/api/printers", self.printers_list)
         app.router.add_get("/api/printers.mobileconfig", self.printers_mobileconfig)
         app.router.add_post("/api/printers/scan", self.printers_scan)

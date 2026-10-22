@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0
+
+- **Multi-tenant networks (optional, option `multi_tenant`, off by default).** Separated network
+  domains (private, work, clients) in one Headscale, managed in a new *Networks* tab:
+  - Domains with their own users and tags; client locations with an Edgebox each. Sites may share
+    one local subnet (e.g. 172.168.1.0/24); the Edgebox maps it 1:1 onto `10.81.<n>.0/24`.
+  - Explicit connections (device / all users of a domain → device, site subnet, Edgebox, port list).
+    Everything else is denied; sites and client domains can never start connections to other domains.
+  - The ACL policy is generated (grants, hosts, autoApprovers) with a `tests` block holding the
+    isolation rules, previewed and checked by Headscale before it is applied. Drift detection,
+    automatic re-apply after device changes, audit log, policy history.
+  - Edgebox: one-time tagged key + `tailscale up` command, generated nftables (NAT + allowlist).
+    Routes outside the model are withdrawn from Edgeboxes.
+  - Device keys and phone approvals per domain/user; route approval only for routes in the model.
+- `headscale policy` errors now show every failed test.
+
 ## 0.6.0
 
 - Printers elsewhere (e.g. at work): add manually with *Reachable via* a Tailscale device at that location. The app approves that /32 route on the device, withdraws it on removal, shows the route status and the command to run. Included in DNS names, AirPrint DNS-SD and the iPhone profile.

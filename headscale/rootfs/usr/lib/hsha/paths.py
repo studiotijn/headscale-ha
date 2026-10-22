@@ -31,3 +31,8 @@ RUNTIME = RUN / "runtime.json"
 SSL = Path(os.environ.get("HSHA_SSL", "/ssl"))
 ETC_HOSTS = Path(os.environ.get("HSHA_ETC_HOSTS", "/etc/hosts"))
 WWW = Path(os.environ.get("HSHA_WWW", "/usr/share/hsha/www"))
+
+# Multi-tenant mode (option multi_tenant)
+TENANCY = DATA / "hsha" / "tenancy.json"
+AUDIT = DATA / "hsha" / "audit.jsonl"  # .jsonl: *.log files are excluded from backups
+POLICY_HISTORY = DATA / "hsha" / "policy-history"
