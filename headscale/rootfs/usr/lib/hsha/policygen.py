@@ -195,12 +195,13 @@ def generate(model: dict, ctx: Context) -> dict:
     for c in model["connections"]:
         if not c.get("enabled", True):
             continue
-        src = _endpoint(model, c["src"], node_ref, is_src=True)
-        dst = _endpoint(model, c["dst"], node_ref, is_src=False)
+        src = _endpoints(model, c["src"], node_ref, is_src=True)
+        dst = _endpoints(model, c["dst"], node_ref, is_src=False)
         if not src or not dst:
             warnings.append(f"Connection {c.get('name') or c['id']} skipped: source or destination has no address")
             continue
-        grants.append({"#name": c.get("name") or c["id"], "src": src, "dst": dst, "ip": _grant_ports(c["ports"])})
+        ports = _grant_ports(tn.expand_ports(model, c["ports"]))
+        grants.append({"#name": c.get("name") or c["id"], "src": src, "dst": dst, "ip": ports})
 
     for g in model.get("manual_grants", []):
         grants.append({**g, "#name": g.get("#name", "manual")})
@@ -222,11 +223,25 @@ def generate(model: dict, ctx: Context) -> dict:
     return {"text": text, "policy": policy, "sha256": sha, "tests": len(tests), "warnings": warnings}
 
 
+def _endpoints(model: dict, refs, node_ref, is_src: bool) -> list[str]:
+    out: list[str] = []
+    for ref in tn.expand_refs(model, refs):
+        for alias in _endpoint(model, ref, node_ref, is_src):
+            if alias not in out:
+                out.append(alias)
+    return out
+
+
 def _endpoint(model: dict, ref: str, node_ref, is_src: bool) -> list[str]:
     kind, _, key = ref.partition(":")
+    if kind == "user":
+        return [f"{key}@"] if tn.user_domain(model, key) else []
     if kind == "domain":
         d = tn.domain(model, key)
-        return [_group(key)] if d and d.get("users") else []
+        if not d:
+            return []
+        out = [_group(key)] if d.get("users") else []
+        return out if is_src else [*out, tn.server_tag(key)]
     if kind == "node":
         alias = node_ref(int(key))
         return [alias] if alias else []
@@ -285,8 +300,9 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
     connected = set()
     for c in model["connections"]:
         if c.get("enabled", True):
-            src_dom = tn.endpoint_domain(model, c["src"], ctx.nodes_by_id)
-            connected.add((src_dom, tn.endpoint_domain(model, c["dst"], ctx.nodes_by_id)))
+            for s in tn.endpoint_domains(model, c["src"], ctx.nodes_by_id):
+                for t in tn.endpoint_domains(model, c["dst"], ctx.nodes_by_id):
+                    connected.add((s, t))
     for a in model["domains"]:
         for b in model["domains"]:
             if a["id"] == b["id"] or (a["id"], b["id"]) in connected:
@@ -303,28 +319,57 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
     for c in model["connections"]:
         if not c.get("enabled", True):
             continue
-        _proto, port = _first_port(c["ports"])
+        _proto, port = _first_port(tn.expand_ports(model, c["ports"]))
         if port is None:
             continue
-        kind, _, key = c["src"].partition(":")
-        srcs = reps.get(key, [])[:1] if kind == "domain" else [a for a in [node_ref(int(key))] if a]
-        dkind, _, dkey = c["dst"].partition(":")
-        dst = None
-        if dkind == "dev":
-            dst = _dev_alias(tn.device(model, dkey))
-        elif dkind == "node":
-            dst = node_ref(int(dkey))
-        elif dkind == "edge":
-            loc = tn.location(model, dkey)
-            edge = tn.edge_node(model, loc, ctx.nodes)
-            dst = node_ref(int(edge["id"])) if edge else None
-        elif dkind == "loc":
-            devs = [d for d in model["devices"] if d["location"] == dkey]
-            dst = _dev_alias(devs[0]) if devs else None
-        for src in srcs:
-            if dst and src != dst:
-                tests.append({"src": src, "accept": [f"{dst}:{port}"]})
+        src = next(
+            (a for r in tn.expand_refs(model, c["src"]) for a in _test_hosts(model, ctx, r, reps, node_ref)), None
+        )
+        dst = next(
+            (a for r in tn.expand_refs(model, c["dst"]) for a in _test_hosts(model, ctx, r, reps, node_ref)), None
+        )
+        if src and dst and src != dst:
+            tests.append({"src": src, "accept": [f"{dst}:{port}"]})
     return tests
+
+
+def _test_hosts(model: dict, ctx: Context, ref: str, reps: dict, node_ref) -> list[str]:
+    """Single-host aliases that stand for a reference in a positive test."""
+    kind, _, key = ref.partition(":")
+    if kind == "node":
+        return [a for a in [node_ref(int(key))] if a]
+    if kind == "user":
+        node = next((n for n in ctx.nodes if tn.node_user(n) == key and not tn.node_tags(n)), None)
+        return [a for a in [node_ref(int(node["id"]))] if a] if node else []
+    if kind == "domain":
+        return reps.get(key, [])[:1]
+    if kind == "dev":
+        dev = tn.device(model, key)
+        return [_dev_alias(dev)] if dev else []
+    if kind == "loc":
+        return [_dev_alias(d) for d in model["devices"] if d["location"] == key][:1]
+    if kind == "edge":
+        loc = tn.location(model, key)
+        edge = tn.edge_node(model, loc, ctx.nodes) if loc else None
+        return [a for a in [node_ref(int(edge["id"]))] if a] if edge else []
+    return []
+
+
+def _source_ips(model: dict, ctx: Context, refs) -> list[str]:
+    """Current tailnet IPv4 addresses of everything a source stands for."""
+    ips: set[str] = set()
+    for ref in tn.expand_refs(model, refs):
+        kind, _, key = ref.partition(":")
+        if kind == "node" and key.isdigit():
+            node = ctx.nodes_by_id.get(int(key))
+            if node and tn.node_ipv4(node):
+                ips.add(tn.node_ipv4(node))
+            continue
+        users = [key] if kind == "user" else (tn.domain(model, key) or {}).get("users", []) if kind == "domain" else []
+        ips |= {
+            tn.node_ipv4(n) for n in ctx.nodes if tn.node_user(n) in users and not tn.node_tags(n) and tn.node_ipv4(n)
+        }
+    return sorted(ips, key=ipaddress.ip_address)
 
 
 # ------------------------------------------------------------------ Edgebox
@@ -361,34 +406,30 @@ def edge_nftables(model: dict, loc_id: str, ctx: Context, sha: str | None = None
     for c in model["connections"]:
         if not c.get("enabled", True):
             continue
-        kind, _, key = c["dst"].partition(":")
-        if kind == "dev":
-            dev = tn.device(model, key)
-            if not dev or dev["location"] != loc_id:
-                continue
-            daddr = dev["ip"]
-        elif kind == "loc" and key == loc_id:
-            daddr = str(local)
-        else:
+        daddrs: list[str] = []
+        for ref in tn.expand_refs(model, c["dst"]):
+            kind, _, key = ref.partition(":")
+            if kind == "dev":
+                dev = tn.device(model, key)
+                if dev and dev["location"] == loc_id and dev["ip"] not in daddrs:
+                    daddrs.append(dev["ip"])
+            elif kind == "loc" and key == loc_id and str(local) not in daddrs:
+                daddrs.append(str(local))
+        if not daddrs:
             continue
-        skind, _, skey = c["src"].partition(":")
-        if skind == "node":
-            node = ctx.nodes_by_id.get(int(skey))
-            ip = tn.node_ipv4(node) if node else None
-            if not ip:
-                continue
-            saddr = ip
-        else:
-            # All users of a domain: their devices as they are now. Download the file again
-            # after adding a device for such a user.
-            dom = tn.domain(model, skey) or {}
-            ips = sorted(
-                {tn.node_ipv4(n) for n in ctx.nodes if tn.node_user(n) in dom.get("users", []) and tn.node_ipv4(n)}
-            )
-            if not ips:
-                continue
-            saddr = ips[0] if len(ips) == 1 else "{ " + ", ".join(ips) + " }"
-        for frag in _nft_ports(c["ports"]):
+        # nftables refuses overlapping set elements: a whole-site subnet absorbs its hosts.
+        daddrs = [
+            str(n.network_address) if n.prefixlen == 32 else str(n)
+            for n in ipaddress.collapse_addresses(ipaddress.ip_network(a) for a in daddrs)
+        ]
+        # The devices these sources stand for right now: download the file again after
+        # adding a device for a user or domain that is a source here.
+        ips = _source_ips(model, ctx, c["src"])
+        if not ips:
+            continue
+        saddr = ips[0] if len(ips) == 1 else "{ " + ", ".join(ips) + " }"
+        daddr = daddrs[0] if len(daddrs) == 1 else "{ " + ", ".join(daddrs) + " }"
+        for frag in _nft_ports(tn.expand_ports(model, c["ports"])):
             match = " ".join(x for x in (f"ip saddr {saddr}", f"ip daddr {daddr}", frag) if x)
             rules.append(f'    iifname "tailscale0" oifname "{lan}" {match} accept  # {c.get("name") or c["id"]}')
     head = [
@@ -444,9 +485,8 @@ def matrix(model: dict, ctx: Context) -> dict:
             for c in model["connections"]:
                 if not c.get("enabled", True):
                     continue
-                if (
-                    tn.endpoint_domain(model, c["src"], ctx.nodes_by_id) == a["id"]
-                    and tn.endpoint_domain(model, c["dst"], ctx.nodes_by_id) == b["id"]
+                if a["id"] in tn.endpoint_domains(model, c["src"], ctx.nodes_by_id) and b["id"] in tn.endpoint_domains(
+                    model, c["dst"], ctx.nodes_by_id
                 ):
                     names.append(c.get("name") or c["id"])
             row[b["id"]] = names

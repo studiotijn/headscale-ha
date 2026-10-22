@@ -162,11 +162,17 @@ Off by default; with the option off nothing below changes.
   (e.g. `172.168.1.0/24`, the default of Seyond LiDARs): the Edgebox maps it 1:1 onto a unique
   VPN subnet, so local `172.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
   has no 4via6, so this mapping is what makes identical sites possible.
-- **Connections.** Only explicit connections are allowed: from a device or all users of a
-  domain, to a device at a site, a whole site subnet, the Edgebox itself (SSH) or a device in
-  another domain, on given ports (`tcp:22`, `udp:2368`, `tcp:8000-8010`, `icmp`, `*`). Replies
-  come back; nothing at a site can start a connection, and a client domain can never be a
-  source towards another domain (the app refuses such a connection).
+- **Connections.** Only explicit connections are allowed. In *Networks → Connections* you pick
+  *From* (users, devices, all users of a domain, or a group), *To* (users, devices, devices at a
+  site, a whole site, the Edgebox itself, or a group) and *Ports* (port profiles such as SSH or Web,
+  or your own: `tcp:8010`, `udp:2368`, `tcp:8000-8010`, `icmp`, *All ports*). Every connection can
+  be edited in place, switched on/off or copied. The editor shows the effect as a sentence and
+  checks it while you type. Replies come back; nothing at a site can start a connection, and a
+  client domain can never be a source towards another domain (the app refuses such a connection).
+- **Groups and port profiles.** Groups bundle users, devices or sites (group → group in one
+  connection). A group with site devices can only be a destination. Port profiles are named port
+  sets; changing one changes every connection that uses it.
+- **Who can reach what?** Pick anything and see its outgoing and incoming access per connection.
 - **Apply.** Changes are pending until you press *Apply* (the first time: *Activate*; the hand-made
   policy is kept in `/data/hsha/policy-history/`). The app generates the whole ACL policy,
   including a `tests` block with the isolation rules; Headscale refuses a policy whose tests fail.

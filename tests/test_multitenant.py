@@ -122,10 +122,10 @@ def test_overlapping_vpn_subnets_rejected():
 @pytest.mark.parametrize(
     ("src", "dst", "message"),
     [
-        ("domain:srs", "node:1", "client domain can never"),
-        ("node:5", "node:4", "client domain can never"),
+        ("domain:srs", "node:1", "can never start connections"),
+        ("node:5", "node:4", "can never start connections"),
         ("node:6", "dev:lidar1", "Edgebox can never be a source"),
-        ("dev:lidar1", "node:1", "source must be"),
+        ("dev:lidar1", "node:1", "can never be a source"),
     ],
 )
 def test_forbidden_connections(src, dst, message):
@@ -249,3 +249,122 @@ def test_generated_policy_accepted_by_headscale(tmp_path):
         text=True,
     )
     assert res.returncode == 0, res.stderr
+
+
+def test_groups_users_and_profiles():
+    m = build()
+    m, _ = tn.apply_change(m, "domain", "update", {**tn.domain(m, "srs"), "users": "srs-jan, srs-piet"})
+    m, _ = tn.apply_change(
+        m, "group", "create", {"id": "beheer", "name": "Beheerders", "members": ["node:1", "user:dynteq"]}
+    )
+    m, _ = tn.apply_change(
+        m, "group", "create", {"id": "lidars", "name": "LiDARs", "members": ["dev:lidar1", "dev:lidar2"]}
+    )
+    m, _ = tn.apply_change(m, "profile", "create", {"name": "LiDAR web", "ports": "tcp:80, tcp:8010"})
+    m, _ = tn.apply_change(
+        m,
+        "connection",
+        "create",
+        {
+            "id": "g2g",
+            "name": "Beheer naar LiDARs",
+            "src": ["group:beheer"],
+            "dst": ["group:lidars"],
+            "ports": ["profile:lidar-web", "profile:ssh"],
+        },
+    )
+    m, _ = tn.apply_change(
+        m,
+        "connection",
+        "create",
+        {"id": "u2e", "name": "Piet", "src": "user:srs-piet", "dst": "edge:loc02", "ports": "profile:ssh"},
+    )
+    tn.validate(m, NODES)
+    r = pg.generate(m, ctx())
+    g = next(x for x in r["policy"]["grants"] if x["#name"] == "Beheer naar LiDARs")
+    assert g["src"] == ["node-1", "dynteq@"]
+    assert g["dst"] == ["dev-lidar1", "dev-lidar2"]
+    assert g["ip"] == ["tcp:80", "tcp:8010", "tcp:22"]
+    piet = next(x for x in r["policy"]["grants"] if x["#name"] == "Piet")
+    assert piet["src"] == ["srs-piet@"] and piet["dst"] == ["tag:srs-loc02-edge"]
+    nft2 = pg.edge_nftables(m, "loc02", ctx())
+    assert "ip saddr { 100.64.0.1, 100.64.0.4 } ip daddr 172.168.1.10 tcp dport { 80, 8010, 22 } accept" in nft2
+
+    m3, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "g2g"), "dst": ["dev:lidar2", "loc:loc02"]})
+    nft3 = pg.edge_nftables(m3, "loc02", ctx())
+    assert "ip daddr 172.168.1.0/24 tcp dport" in nft3 and "172.168.1.10," not in nft3  # host absorbed by subnet
+    if shutil.which("nft"):
+        for text in (nft2, nft3):
+            res = subprocess.run(["nft", "-c", "-f", "-"], input=text, text=True, capture_output=True)
+            assert res.returncode == 0, res.stderr
+
+    # Editing a profile changes every connection that uses it.
+    m, _ = tn.apply_change(m, "profile", "update", {"id": "lidar-web", "name": "LiDAR web", "ports": "tcp:8010"})
+    g = next(x for x in pg.generate(m, ctx())["policy"]["grants"] if x["#name"] == "Beheer naar LiDARs")
+    assert g["ip"] == ["tcp:8010", "tcp:22"]
+
+    # In use: cannot delete; a group with a site device can never be a source.
+    with pytest.raises(tn.ModelError, match="used by"):
+        tn.apply_change(m, "group", "delete", {"id": "beheer"})
+    with pytest.raises(tn.ModelError, match="used by"):
+        tn.apply_change(m, "profile", "delete", {"id": "ssh"})
+    bad, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "g2g"), "src": ["group:lidars"]})
+    with pytest.raises(tn.ModelError, match="never start"):
+        tn.validate(bad, NODES)
+    # A group mixing a client user with Private, towards Private: refused.
+    m2, _ = tn.apply_change(m, "group", "create", {"id": "mix", "name": "Mix", "members": ["user:srs-jan", "node:1"]})
+    bad, _ = tn.apply_change(m2, "connection", "create", {"src": "group:mix", "dst": "node:2", "ports": "*"})
+    with pytest.raises(tn.ModelError, match="client domain"):
+        tn.validate(bad, NODES)
+
+
+def tn_conn(m, cid):
+    return next(c for c in m["connections"] if c["id"] == cid)
+
+
+def test_edit_in_place_and_cascade():
+    m = build()
+    c = next(x for x in m["connections"] if x["name"] == "thuis-lidar")
+    m, summary = tn.apply_change(
+        m, "connection", "update", {**c, "dst": ["dev:lidar1", "dev:lidar2"], "ports": "tcp:80"}
+    )
+    c2 = tn_conn(m, c["id"])
+    assert c2["dst"] == ["dev:lidar1", "dev:lidar2"] and c2["ports"] == ["tcp:80"] and "updated" in summary
+    m, _ = tn.apply_change(m, "location", "update", {**tn.location(m, "loc02"), "name": "Hengelo"})
+    assert tn.location(m, "loc02")["name"] == "Hengelo" and tn.location(m, "loc02")["vpn_subnet"] == "10.81.2.0/24"
+    m, _ = tn.apply_change(m, "device", "update", {**tn.device(m, "lidar2"), "ip": "172.168.1.11"})
+    assert pg.generate(m, ctx())["policy"]["hosts"]["dev-lidar2"] == "10.81.2.11/32"
+    # Deleting a location removes its devices from connections, but keeps the rest of the connection.
+    m, _ = tn.apply_change(m, "location", "delete", {"id": "loc02"})
+    assert tn_conn(m, c["id"])["dst"] == ["dev:lidar1"]
+    # Removing a user from a domain removes it from connections.
+    m, _ = tn.apply_change(
+        m, "connection", "create", {"id": "u", "src": "user:srs-jan", "dst": "edge:loc01", "ports": "tcp:22"}
+    )
+    m, _ = tn.apply_change(m, "domain", "update", {**tn.domain(m, "srs"), "users": ""})
+    assert all(x["id"] != "u" for x in m["connections"])
+
+
+def test_access_overview():
+    m = build()
+    by_id = {n["id"]: n for n in NODES}
+    a = tn.access(m, "node:1", by_id)
+    assert [x["name"] for x in a["outgoing"]] == ["thuis-lidar"] and a["internal"] == ["private"]
+    a = tn.access(m, "dev:lidar1", by_id)
+    assert sorted(x["name"] for x in a["incoming"]) == ["thuis-lidar", "werk-loc01"]
+    a = tn.access(m, "node:5", by_id)  # client user: via domain:srs
+    assert [x["name"] for x in a["outgoing"]] == ["klant-ssh"]
+
+
+def test_old_connections_are_migrated(tmp_path, monkeypatch):
+    from hsha import paths
+
+    monkeypatch.setattr(paths, "TENANCY", tmp_path / "t.json")
+    m = build()
+    for c in m["connections"]:
+        c["src"], c["dst"] = c["src"][0], c["dst"][0]
+    m.pop("port_profiles")
+    tn.save(m)
+    loaded = tn.load("tijn")
+    assert all(isinstance(c["src"], list) for c in loaded["connections"])
+    assert tn.profile(loaded, "ssh")["ports"] == ["tcp:22"]

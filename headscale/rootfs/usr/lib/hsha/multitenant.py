@@ -62,6 +62,20 @@ class MultiTenant:
             audit.record("model", actor, summary, revision=self.model["revision"], data=data)
             return self.model
 
+    async def dry_run(self, kind: str, action: str, data: dict) -> dict:
+        """Validate a change without saving it (live feedback in the editors)."""
+        nodes = await hs.nodes()
+        try:
+            new, summary = tenancy.apply_change(self.model, kind, action, data)
+            warnings = tenancy.validate(new, nodes, self._home_routes())
+        except (ModelError, ValueError) as exc:
+            return {"ok": False, "error": str(exc), "warnings": []}
+        return {"ok": True, "summary": summary, "warnings": warnings}
+
+    async def access(self, ref: str) -> dict:
+        nodes = await hs.nodes()
+        return tenancy.access(self.model, ref, {int(n["id"]): n for n in nodes})
+
     async def preview(self) -> dict:
         ctx = await self.context()
         gen = policygen.generate(self.model, ctx)

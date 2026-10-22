@@ -248,3 +248,63 @@ nav button[hidden] { display: none; }
 .card h3 { font-size: 14px; font-weight: 500; margin: 16px 0 8px; }
 #networks .note { margin: 8px 0; }
 #networks pre.mono { white-space: pre-wrap; max-height: 420px; overflow: auto; }
+
+/* Networks tab: chips, pickers, dialogs */
+.subnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+.subnav button {
+  border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+.subnav button[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px 10px; border-radius: 999px;
+  background: var(--code-bg); border: 1px solid var(--border); font-size: 13px; line-height: 1.6; max-width: 100%;
+}
+.chip-profile, .chip-port { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.chip-profile { background: var(--ok-bg); color: var(--ok); border-color: transparent; font-family: inherit; }
+.chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 0 0 4px; line-height: 1; }
+.chip-x:hover { color: var(--danger); }
+.chip-toggle {
+  border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; font-size: 13px;
+  padding: 3px 12px; border-radius: 999px; cursor: pointer;
+}
+.chip-toggle.on { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.chip-toggle.warn.on { background: var(--warn); border-color: var(--warn); }
+.picker { display: flex; flex-direction: column; gap: 8px; }
+.picker-add { align-self: flex-start; }
+.row.tight { margin: 0; gap: 8px; align-items: center; }
+.grow-input { flex: 1 1 220px; min-width: 0; }
+.grow { flex: 1; }
+.conn-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.conn {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.conn:hover { border-color: var(--primary); }
+.conn.off { opacity: .55; }
+.conn-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.conn-body { display: grid; grid-template-columns: 1fr auto 1fr 1fr; gap: 12px; align-items: start; }
+.conn-body .arrow { font-size: 18px; color: var(--muted); padding-top: 14px; }
+.conn .lbl { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+@media (max-width: 760px) { .conn-body { grid-template-columns: 1fr; } .conn-body .arrow { display: none; } }
+input.switch { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--code-bg); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.two-col > div { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.two-col > div > .btn { align-self: flex-start; }
+@media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+.nowrap { white-space: nowrap; }
+dialog.mt-dialog {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text);
+  padding: 0; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+}
+dialog.mt-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.dlg { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+.dlg h2 { margin: 0; font-size: 18px; font-weight: 500; }
+.dlg-foot { display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--border); padding-top: 14px; }
+.form-grid { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.field > span { font-weight: 500; color: var(--text); }
+.sentence { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--code-bg); }

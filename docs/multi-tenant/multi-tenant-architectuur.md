@@ -51,8 +51,8 @@ probleem. Een apparaat op de site kan echte internetadressen in dat bereik niet 
 - **UDP-puntenwolk van de LiDAR:** de LiDAR *stuurt* UDP naar een ingesteld doel. Dat is
   verkeer dat vanaf de site start en wordt dus geblokkeerd. Verwerk de data lokaal (Edgebox), of
   laat de ontvangende pc de stream opvragen als het protocol dat toestaat.
-- **Bewerken van locaties/verbindingen in de UI:** nu verwijderen en opnieuw aanmaken
-  (verbindingen aan/uit kan wel).
+- ~~Bewerken in de UI~~: opgelost in 0.8.0. Alles wordt ter plekke bewerkt, met groepen,
+  poortprofielen, meerdere bronnen/bestemmingen per verbinding en een overzicht *Wie mag wat?*.
 - **Echte veldtest (fase 3–4):** met een Edgebox, de RUTX50-firewallzone en het intrekken van
   toegang tijdens een lopende sessie.
 

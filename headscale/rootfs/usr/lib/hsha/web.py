@@ -521,6 +521,16 @@ class App:
         await mt.change(request.match_info["kind"], request.match_info["action"], body, self._actor(request))
         return web.json_response({"ok": True, "status": mt.status()})
 
+    async def tenancy_validate(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        mt = self._mt()
+        return web.json_response(
+            await mt.dry_run(str(body.get("kind")), str(body.get("action")), body.get("data") or {})
+        )
+
+    async def tenancy_access(self, request: web.Request) -> web.Response:
+        return web.json_response(await self._mt().access(request.query.get("ref", "")))
+
     async def tenancy_preview(self, _request: web.Request) -> web.Response:
         return web.json_response(await self._mt().preview())
 
@@ -582,12 +592,15 @@ class App:
         app.router.add_post("/api/services/{id}/share", self.services_share)
         app.router.add_get("/api/tenancy", self.tenancy_get)
         app.router.add_get("/api/tenancy/preview", self.tenancy_preview)
+        app.router.add_post("/api/tenancy/validate", self.tenancy_validate)
+        app.router.add_get("/api/tenancy/access", self.tenancy_access)
         app.router.add_post("/api/tenancy/apply", self.tenancy_apply)
         app.router.add_get("/api/tenancy/audit", self.tenancy_audit)
         app.router.add_post("/api/tenancy/locations/{id}/key", self.tenancy_edge_key)
         app.router.add_get("/api/tenancy/locations/{id}/nftables", self.tenancy_edge_nft)
         app.router.add_post(
-            "/api/tenancy/{kind:domain|location|device|connection}/{action:create|update|delete}", self.tenancy_change
+            "/api/tenancy/{kind:domain|location|device|connection|group|profile}/{action:create|update|delete}",
+            self.tenancy_change,
         )
         app.router.add_get("/api/printers", self.printers_list)
         app.router.add_get("/api/printers.mobileconfig", self.printers_mobileconfig)

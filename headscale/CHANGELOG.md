@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+- **Networks tab, easy editing:** every connection, location, device, domain, group and port
+  profile is edited in place in a dialog (no more delete and re-create).
+  - Connections have several sources and destinations: users, devices, all users of a domain,
+    groups → devices, whole sites, Edgeboxes, users, domains, groups.
+  - **Groups** (group → group) and **port profiles** (SSH, Web, RDP, VNC, SMB, Modbus TCP, OPC UA,
+    MQTT, Ping, plus your own); changing a profile changes every connection that uses it.
+  - Port buttons plus free entry, a plain-language sentence, and a live check that shows why a
+    connection would be refused before you save.
+  - *Who can reach what?*: outgoing and incoming access of any user, device, group or site.
+  - Sub-tabs, search, on/off switch and copy per connection.
+- Edgebox firewall merges a host into a whole-site subnet in the same rule (nftables rejects overlaps).
+- Connections from 0.7.0 are migrated automatically.
+- README: *Add App repository to my Home Assistant* button and an overview of all features.
+
 ## 0.7.0
 
 - **Multi-tenant networks (optional, option `multi_tenant`, off by default).** Separated network

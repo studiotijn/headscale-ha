@@ -70,17 +70,43 @@ def default_model(admin_user: str) -> dict:
         "locations": [],
         "devices": [],
         "connections": [],
+        "groups": [],
+        "port_profiles": default_profiles(),
         "manual_grants": [],
         "applied": None,
     }
+
+
+def default_profiles() -> list[dict]:
+    """Ready-made port sets; editable in the app. A connection that uses one follows its changes."""
+    return [
+        {"id": "ssh", "name": "SSH", "ports": ["tcp:22"]},
+        {"id": "web", "name": "Web (HTTP/HTTPS)", "ports": ["tcp:80", "tcp:443"]},
+        {"id": "rdp", "name": "Remote Desktop", "ports": ["tcp:3389"]},
+        {"id": "vnc", "name": "VNC", "ports": ["tcp:5900"]},
+        {"id": "smb", "name": "File sharing (SMB)", "ports": ["tcp:445"]},
+        {"id": "modbus", "name": "Modbus TCP", "ports": ["tcp:502"]},
+        {"id": "opcua", "name": "OPC UA", "ports": ["tcp:4840"]},
+        {"id": "mqtt", "name": "MQTT", "ports": ["tcp:1883", "tcp:8883"]},
+        {"id": "ping", "name": "Ping", "ports": ["icmp:*"]},
+    ]
 
 
 def load(admin_user: str) -> dict:
     model = read_json(paths.TENANCY, None)
     if not isinstance(model, dict) or model.get("schema") != SCHEMA:
         return default_model(admin_user)
-    for key, default in (("locations", []), ("devices", []), ("connections", []), ("manual_grants", [])):
+    for key, default in (
+        ("locations", []),
+        ("devices", []),
+        ("connections", []),
+        ("manual_grants", []),
+        ("groups", []),
+    ):
         model.setdefault(key, default)
+    model.setdefault("port_profiles", default_profiles())
+    for c in model["connections"]:  # 0.7.0 stored one source and one destination as strings
+        c["src"], c["dst"] = as_list(c.get("src")), as_list(c.get("dst"))
     return model
 
 
@@ -227,21 +253,135 @@ def _net(value: str, what: str) -> ipaddress.IPv4Network:
     return net
 
 
-def endpoint_domain(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> str | None:
+# ------------------------------------------------------------------ references
+# A reference names something a connection or group points at:
+#   user:<name>  domain:<id>  node:<headscale id>  group:<id>        (sources and destinations)
+#   dev:<id>     loc:<id>     edge:<location id>                      (destinations only)
+SRC_KINDS = ("user", "domain", "node", "group")
+DST_KINDS = ("user", "domain", "node", "group", "dev", "loc", "edge")
+MEMBER_KINDS = ("user", "domain", "node", "dev", "loc", "edge")
+
+
+def as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [v for v in re.split(r"[,\s]+", value) if v]
+    out: list[str] = []
+    for v in value:
+        v = str(v).strip()
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def group(model: dict, group_id: str) -> dict | None:
+    return next((g for g in model.get("groups", []) if g["id"] == group_id), None)
+
+
+def profile(model: dict, profile_id: str) -> dict | None:
+    return next((p for p in model.get("port_profiles", []) if p["id"] == profile_id), None)
+
+
+def user_domain(model: dict, user: str) -> str | None:
+    return next((d["id"] for d in model["domains"] if user in d.get("users", [])), None)
+
+
+def expand_refs(model: dict, refs) -> list[str]:
+    """Replace group references by their members (groups do not nest)."""
+    out: list[str] = []
+    for ref in as_list(refs):
+        kind, _, key = ref.partition(":")
+        members = (group(model, key) or {}).get("members", []) if kind == "group" else [ref]
+        for m in members:
+            if m not in out:
+                out.append(m)
+    return out
+
+
+def expand_ports(model: dict, ports) -> list[str]:
+    """Port entries with profile:<id> replaced by the ports of that profile."""
+    out: list[str] = []
+    for p in as_list(ports):
+        if p.startswith("profile:"):
+            prof = profile(model, p.split(":", 1)[1])
+            items = prof["ports"] if prof else []
+        else:
+            items = [p]
+        for i in items:
+            if i not in out:
+                out.append(i)
+    return ["*"] if "*" in out else out
+
+
+def normalize_ports(model: dict, ports) -> list[str]:
+    out: list[str] = []
+    for p in as_list(ports):
+        if p.startswith("profile:"):
+            if profile(model, p.split(":", 1)[1]) is None:
+                raise ModelError(f"Unknown port profile '{p.split(':', 1)[1]}'")
+            item = [p]
+        else:
+            item = parse_ports([p])
+        for i in item:
+            if i not in out:
+                out.append(i)
+    if not out:
+        raise ModelError("A connection needs at least one port (use * for all)")
+    return out
+
+
+def ref_domains(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> set[str]:
     kind, _, key = ref.partition(":")
+    if kind == "group":
+        return set().union(*[ref_domains(model, m, nodes_by_id) for m in expand_refs(model, [ref])] or [set()])
     if kind == "domain":
-        return key
+        return {key}
+    if kind == "user":
+        d = user_domain(model, key)
+        return {d} if d else set()
     if kind == "node":
-        node = nodes_by_id.get(int(key))
-        return node_domain(model, node) if node else None
+        node = nodes_by_id.get(int(key)) if key.isdigit() else None
+        d = node_domain(model, node) if node else None
+        return {d} if d else set()
     if kind == "dev":
         dev = device(model, key)
         loc = location(model, dev["location"]) if dev else None
-        return loc["domain"] if loc else None
+        return {loc["domain"]} if loc else set()
     if kind in ("loc", "edge"):
         loc = location(model, key)
-        return loc["domain"] if loc else None
-    return None
+        return {loc["domain"]} if loc else set()
+    return set()
+
+
+def endpoint_domains(model: dict, refs, nodes_by_id: dict[int, dict]) -> set[str]:
+    return set().union(*[ref_domains(model, r, nodes_by_id) for r in as_list(refs)] or [set()])
+
+
+def endpoint_domain(model: dict, ref, nodes_by_id: dict[int, dict]) -> str | None:
+    """Single domain of an endpoint (None when it spans several or none)."""
+    doms = endpoint_domains(model, ref, nodes_by_id)
+    return next(iter(doms)) if len(doms) == 1 else None
+
+
+def ref_exists(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> bool | None:
+    """True/False, or None when it cannot be known (node list unavailable)."""
+    kind, _, key = ref.partition(":")
+    if kind == "user":
+        return user_domain(model, key) is not None
+    if kind == "domain":
+        return domain(model, key) is not None
+    if kind == "group":
+        return group(model, key) is not None
+    if kind == "dev":
+        return device(model, key) is not None
+    if kind in ("loc", "edge"):
+        return location(model, key) is not None
+    if kind == "node":
+        if not key.isdigit():
+            return False
+        return (int(key) in nodes_by_id) if nodes_by_id else None
+    return False
 
 
 def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str] | None = None) -> list[str]:
@@ -319,6 +459,10 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
             raise ModelError(f"Two devices with IP {dev['ip']} in the same location")
         seen.add(key)
 
+    for g in model.get("groups", []):
+        check_group(model, g)
+    for prof in model.get("port_profiles", []):
+        parse_ports(prof.get("ports"))
     for c in model["connections"]:
         check_connection(model, c, nodes_by_id, warnings)
     for g in model.get("manual_grants", []):
@@ -327,43 +471,122 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
     return warnings
 
 
+def check_group(model: dict, g: dict) -> None:
+    for m in g.get("members", []):
+        kind = m.partition(":")[0]
+        if kind not in MEMBER_KINDS:
+            raise ModelError(f"Group {g['name']}: '{m}' cannot be a member (groups do not nest)")
+        if ref_exists(model, m, {}) is False:
+            raise ModelError(f"Group {g['name']}: unknown member {m}")
+
+
 def check_connection(model: dict, c: dict, nodes_by_id: dict[int, dict], warnings: list[str]) -> None:
     name = c.get("name") or c.get("id")
-    src_kind, _, src_key = str(c.get("src", "")).partition(":")
-    dst_kind, _, dst_key = str(c.get("dst", "")).partition(":")
-    if src_kind not in ("node", "domain"):
-        raise ModelError(f"Connection {name}: the source must be a device or the users of a domain")
-    if dst_kind not in ("node", "dev", "loc", "edge"):
-        raise ModelError(f"Connection {name}: unknown destination")
-    if src_kind == "domain" and domain(model, src_key) is None:
-        raise ModelError(f"Connection {name}: unknown source domain")
-    if src_kind == "node":
-        node = nodes_by_id.get(int(src_key)) if src_key.isdigit() else None
-        if node is None:
-            if nodes_by_id:
-                warnings.append(f"Connection {name}: source device {src_key} no longer exists")
-        elif node_location(model, node):
+    srcs, dsts = as_list(c.get("src")), as_list(c.get("dst"))
+    if not srcs:
+        raise ModelError(f"Connection {name}: choose at least one source")
+    if not dsts:
+        raise ModelError(f"Connection {name}: choose at least one destination")
+    for ref in srcs:
+        if ref.partition(":")[0] not in SRC_KINDS:
+            raise ModelError(f"Connection {name}: a site, device at a site or Edgebox can never be a source")
+    for ref in dsts:
+        if ref.partition(":")[0] not in DST_KINDS:
+            raise ModelError(f"Connection {name}: unknown destination {ref}")
+    for ref in srcs + dsts:
+        if ref_exists(model, ref, nodes_by_id) is False:
+            if ref.startswith("node:"):
+                warnings.append(f"Connection {name}: device {ref.split(':')[1]} no longer exists")
+            else:
+                raise ModelError(f"Connection {name}: unknown {ref}")
+    for ref in expand_refs(model, srcs):
+        kind, _, key = ref.partition(":")
+        if kind not in ("user", "domain", "node"):
+            raise ModelError(
+                f"Connection {name}: the group used as source contains a site, device at a site or Edgebox; "
+                "those can never start connections"
+            )
+        node = nodes_by_id.get(int(key)) if kind == "node" and key.isdigit() else None
+        if node is not None and node_location(model, node):
             raise ModelError(f"Connection {name}: an Edgebox can never be a source")
-    if dst_kind == "dev" and device(model, dst_key) is None:
-        raise ModelError(f"Connection {name}: unknown destination device")
-    if dst_kind in ("loc", "edge") and location(model, dst_key) is None:
-        raise ModelError(f"Connection {name}: unknown destination location")
-    if dst_kind == "node" and nodes_by_id and int(dst_key) not in nodes_by_id:
-        warnings.append(f"Connection {name}: destination device {dst_key} no longer exists")
-    parse_ports(c.get("ports"))
+    normalize_ports(model, c.get("ports"))
 
-    src_dom = endpoint_domain(model, c["src"], nodes_by_id)
-    dst_dom = endpoint_domain(model, c["dst"], nodes_by_id)
-    src_d = domain(model, src_dom) if src_dom else None
-    if src_d and src_d["kind"] == "client" and dst_dom and dst_dom != src_dom:
-        raise ModelError(f"Connection {name}: a client domain can never start connections to another domain")
-    if src_dom and dst_dom and src_dom != dst_dom:
-        dst_d = domain(model, dst_dom)
-        if src_d and dst_d and src_d["kind"] != "client" and dst_d["kind"] != "client":
-            warnings.append(f"Connection {name}: crosses {src_d['name']} → {dst_d['name']} (allowed, but on purpose?)")
+    src_doms = endpoint_domains(model, srcs, nodes_by_id)
+    dst_doms = endpoint_domains(model, dsts, nodes_by_id)
+    for sd in src_doms:
+        d = domain(model, sd)
+        if d and d["kind"] == "client" and dst_doms - {sd}:
+            raise ModelError(
+                f"Connection {name}: {d['name']} is a client domain; it can never start connections to another domain"
+            )
+    for sd in src_doms:
+        for dd in dst_doms - {sd}:
+            a, b = domain(model, sd), domain(model, dd)
+            if a and b and a["kind"] != "client" and b["kind"] != "client":
+                warnings.append(f"Connection {name}: crosses {a['name']} → {b['name']} (allowed, but on purpose?)")
+
+
+# ------------------------------------------------------------------ access overview
+def _covering(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> set[str]:
+    """All references that include ``ref`` (itself, its user, domain, site, groups)."""
+    kind, _, key = ref.partition(":")
+    out = {ref}
+    if kind == "node" and key.isdigit() and int(key) in nodes_by_id:
+        node = nodes_by_id[int(key)]
+        user = node_user(node)
+        if user and not node_tags(node) and user_domain(model, user):
+            out.add(f"user:{user}")
+        d = node_domain(model, node)
+        if d and not node_location(model, node):
+            out.add(f"domain:{d}")
+        loc = node_location(model, node)
+        if loc:
+            out.add(f"edge:{loc}")
+    if kind == "user":
+        d = user_domain(model, key)
+        if d:
+            out.add(f"domain:{d}")
+    if kind == "dev":
+        dev = device(model, key)
+        if dev:
+            out.add(f"loc:{dev['location']}")
+    for g in model.get("groups", []):
+        if out & set(g.get("members", [])):
+            out.add(f"group:{g['id']}")
+    return out
+
+
+def access(model: dict, ref: str, nodes_by_id: dict[int, dict]) -> dict:
+    """What ``ref`` may reach (outgoing) and who may reach it (incoming), per connection."""
+    cover = _covering(model, ref, nodes_by_id)
+    outgoing, incoming = [], []
+    for c in model["connections"]:
+        row = {
+            "id": c["id"],
+            "name": c.get("name"),
+            "enabled": c.get("enabled", True),
+            "ports": expand_ports(model, c["ports"]),
+        }
+        if cover & set(as_list(c["src"])):
+            outgoing.append({**row, "refs": as_list(c["dst"]), "via": sorted(cover & set(as_list(c["src"])))})
+        if cover & set(as_list(c["dst"])):
+            incoming.append({**row, "refs": as_list(c["src"]), "via": sorted(cover & set(as_list(c["dst"])))})
+    doms = ref_domains(model, ref, nodes_by_id)
+    internal = [d for d in doms if (domain(model, d) or {}).get("internal") == "full"]
+    return {"ref": ref, "outgoing": outgoing, "incoming": incoming, "internal": internal}
 
 
 # ------------------------------------------------------------------ mutations
+COLLECTIONS = {
+    "domain": "domains",
+    "location": "locations",
+    "device": "devices",
+    "connection": "connections",
+    "group": "groups",
+    "profile": "port_profiles",
+}
+
+
 def _bump(model: dict) -> None:
     model["revision"] = int(model.get("revision", 0)) + 1
     model["changed_at"] = int(time.time())
@@ -372,20 +595,23 @@ def _bump(model: dict) -> None:
 def apply_change(model: dict, kind: str, action: str, data: dict) -> tuple[dict, str]:
     """Return a changed copy of the model and a human summary (for the audit log)."""
     m = copy.deepcopy(model)
-    coll = {"domain": "domains", "location": "locations", "device": "devices", "connection": "connections"}.get(kind)
+    m.setdefault("groups", [])
+    m.setdefault("port_profiles", [])
+    coll = COLLECTIONS.get(kind)
     if coll is None:
         raise ModelError(f"Unknown object type {kind}")
     items = m[coll]
 
     if action == "delete":
         key = str(data.get("id"))
-        before = len(items)
-        m[coll] = [x for x in items if x["id"] != key]
-        if len(m[coll]) == before:
+        old = next((x for x in items if x["id"] == key), None)
+        if old is None:
             raise ModelError(f"{kind} {key} not found")
-        _cascade_delete(m, kind, key)
+        _check_unused(m, kind, key)
+        m[coll] = [x for x in items if x["id"] != key]
+        _cascade_delete(m, kind, key, old)
         _bump(m)
-        return m, f"{kind} {key} deleted"
+        return m, f"{kind} {old.get('name') or key} deleted"
 
     if action not in ("create", "update"):
         raise ModelError(f"Unknown action {action}")
@@ -398,30 +624,68 @@ def apply_change(model: dict, kind: str, action: str, data: dict) -> tuple[dict,
         idx = next((i for i, x in enumerate(items) if x["id"] == obj["id"]), None)
         if idx is None:
             raise ModelError(f"{kind} {obj['id']} not found")
-        items[idx] = {**items[idx], **obj}
+        before = items[idx]
+        items[idx] = {**before, **obj}
+        if kind == "domain":
+            gone = set(before.get("users", [])) - set(obj["users"])
+            _drop_refs(m, {f"user:{u}" for u in gone})
     _bump(m)
     label = obj.get("name") or obj["id"]
     if kind == "connection":
-        label = f"{label} ({obj['src']} → {obj['dst']} {','.join(obj['ports'])}, {'on' if obj['enabled'] else 'off'})"
+        label = (
+            f"{label} ({', '.join(obj['src'])} → {', '.join(obj['dst'])}; {', '.join(obj['ports'])}; "
+            f"{'on' if obj['enabled'] else 'off'})"
+        )
     return m, f"{kind} {label} {action}d"
 
 
-def _cascade_delete(m: dict, kind: str, key: str) -> None:
+def _check_unused(m: dict, kind: str, key: str) -> None:
+    if kind == "group":
+        ref = f"group:{key}"
+        used = [c.get("name") or c["id"] for c in m["connections"] if ref in as_list(c["src"]) + as_list(c["dst"])]
+        if used:
+            raise ModelError(f"This group is used by: {', '.join(used)}. Change those connections first.")
+    if kind == "profile":
+        ref = f"profile:{key}"
+        used = [c.get("name") or c["id"] for c in m["connections"] if ref in as_list(c["ports"])]
+        if used:
+            raise ModelError(f"This port profile is used by: {', '.join(used)}. Change those connections first.")
+    if kind == "domain" and any(loc["domain"] == key for loc in m["locations"]):
+        raise ModelError("Delete the locations of this domain first")
+
+
+def _drop_refs(m: dict, refs: set[str]) -> None:
+    """Remove references to deleted things; connections left without source or destination go too."""
+    if not refs:
+        return
+    for g in m.get("groups", []):
+        g["members"] = [x for x in g.get("members", []) if x not in refs]
+    kept = []
+    for c in m["connections"]:
+        c["src"] = [x for x in as_list(c["src"]) if x not in refs]
+        c["dst"] = [x for x in as_list(c["dst"]) if x not in refs]
+        if c["src"] and c["dst"]:
+            kept.append(c)
+    m["connections"] = kept
+
+
+def _cascade_delete(m: dict, kind: str, key: str, old: dict) -> None:
     if kind == "domain":
-        if any(loc["domain"] == key for loc in m["locations"]):
-            raise ModelError("Delete the locations of this domain first")
-        m["connections"] = [c for c in m["connections"] if c["src"] != f"domain:{key}"]
+        _drop_refs(m, {f"domain:{key}"} | {f"user:{u}" for u in old.get("users", [])})
     if kind == "location":
+        devs = [d for d in m["devices"] if d["location"] == key]
         m["devices"] = [d for d in m["devices"] if d["location"] != key]
-        gone = {f"loc:{key}", f"edge:{key}"}
-        m["connections"] = [c for c in m["connections"] if c["dst"] not in gone]
-    if kind in ("location", "device"):
-        live = {f"dev:{d['id']}" for d in m["devices"]}
-        m["connections"] = [c for c in m["connections"] if not c["dst"].startswith("dev:") or c["dst"] in live]
+        _drop_refs(m, {f"loc:{key}", f"edge:{key}"} | {f"dev:{d['id']}" for d in devs})
+    if kind == "device":
+        _drop_refs(m, {f"dev:{key}"})
 
 
 def _text(data: dict, key: str, default: str = "", limit: int = 64) -> str:
     return str(data.get(key) if data.get(key) is not None else default).strip()[:limit]
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9-]+", "-", text.lower()).strip("-")[:20] or new_id("p")
 
 
 def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
@@ -446,9 +710,13 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
         local = _text(data, "local_subnet", "172.168.1.0/24")
         vpn = _text(data, "vpn_subnet") or suggest_vpn_subnet(m, number, local)
         loc_id = _text(data, "id").lower() or (f"loc{number:02d}" if number else "")
+        if not creating:
+            current = location(m, loc_id) or {}
+            if current and data.get("domain") and data["domain"] != current.get("domain"):
+                raise ModelError("A location cannot move to another domain; create a new one")
         return {
             "id": loc_id,
-            "domain": _text(data, "domain"),
+            "domain": _text(data, "domain") or (location(m, loc_id) or {}).get("domain", ""),
             "name": _text(data, "name") or loc_id,
             "number": number,
             "local_subnet": str(ipaddress.ip_network(local, strict=False)),
@@ -464,13 +732,29 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
             "ip": str(ipaddress.IPv4Address(_text(data, "ip"))),
             "note": _text(data, "note", "", 200),
         }
+    if kind == "group":
+        name = _text(data, "name")
+        if not name:
+            raise ModelError("A group needs a name")
+        return {
+            "id": _text(data, "id") or new_id("g"),
+            "name": name,
+            "members": as_list(data.get("members")),
+            "note": _text(data, "note", "", 200),
+        }
+    if kind == "profile":
+        name = _text(data, "name")
+        if not name:
+            raise ModelError("A port profile needs a name")
+        pid = _text(data, "id") or _slug(name)
+        return {"id": pid, "name": name, "ports": parse_ports(data.get("ports"))}
     # connection
     return {
         "id": _text(data, "id") or new_id("c"),
-        "name": _text(data, "name"),
-        "src": _text(data, "src"),
-        "dst": _text(data, "dst"),
-        "ports": parse_ports(data.get("ports")),
+        "name": _text(data, "name", "", 80),
+        "src": as_list(data.get("src")),
+        "dst": as_list(data.get("dst")),
+        "ports": normalize_ports(m, data.get("ports")),
         "enabled": bool(data.get("enabled", True)),
         "note": _text(data, "note", "", 200),
     }
