@@ -288,7 +288,8 @@ class App:
         return web.Response(
             body=body,
             content_type="application/x-apple-aspen-config",
-            headers={"Content-Disposition": 'attachment; filename="headscale-printers.mobileconfig"'},
+            # inline + top-level tab: iOS then offers to install it instead of saving it to Files.
+            headers={"Content-Disposition": 'inline; filename="headscale-printers.mobileconfig"'},
         )
 
     async def printers_list(self, _request: web.Request) -> web.Response:

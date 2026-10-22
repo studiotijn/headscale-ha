@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- iPhone profile opens in a new tab and is served inline, so iOS offers to install it; clearer install steps.
+
 ## 0.5.3
 
 - iPhone/iPad profile (AirPrint payload) in the Printers tab: adds the printers by IP address, so they show up in the print menu over Tailscale even when iOS doesn't browse wide-area Bonjour over the VPN.
