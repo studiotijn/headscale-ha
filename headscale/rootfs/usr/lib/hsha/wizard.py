@@ -432,10 +432,21 @@ class Wizard:
         browse = await asyncio.to_thread(dnssd.lookup, f"b._dns-sd._udp.{d}", "PTR")
         printers = await asyncio.to_thread(dnssd.lookup, f"_ipp._tcp.{d}", "PTR")
         normal = await asyncio.to_thread(dnssd.lookup, "www.home-assistant.io", "A")
+        # The printer's own name (A record): this is what the iPhone asks right before printing.
+        hosts = []
+        for p in self.app.manager.state.get("printers", []):
+            if p.get("protocol") not in ("ipp", "ipps"):
+                continue
+            name = f"{p['slug']}.{d}"
+            via53 = await asyncio.to_thread(dnssd.lookup, name, "A")
+            direct = await asyncio.to_thread(dnssd.lookup, name, "A", "127.0.0.1", dnssd.ALT_PORT, 2)
+            hosts.append({"name": name, "ip": p.get("ip"), "via53": via53, "direct": direct})
+        hosts_ok = all(h["via53"].get("ok") for h in hosts)
         result = {
-            "ok": bool(browse.get("ok")),
+            "ok": bool(browse.get("ok")) and hosts_ok,
             "browse": browse,
             "printers": printers,
+            "hosts": hosts,
             "normal_dns": normal,
             "time": int(time.time()),
         }

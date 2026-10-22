@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- AirPrint test also resolves each printer's own name (A record) through port 53 and directly, and explains when AdGuard is the one in the way (cache, rate limit).
+
 ## 0.5.1
 
 - AirPrint step: shows which DNS settings Headscale pushes to devices, and the latest DNS

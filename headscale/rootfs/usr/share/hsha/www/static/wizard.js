@@ -306,6 +306,8 @@ Object.assign(STRINGS.nl, {
   ap_test: "Keten testen", ap_test_ok: "Werkt: {domain} wordt beantwoord via poort 53 ✓", ap_test_printers: "Printers gevonden: {list}",
   ap_test_fail: "Geen antwoord voor {domain} via poort 53. Staat de AdGuard-regel erin en is ‘Instellingen opslaan’ geklikt?",
   ap_test_normal: "Gewone DNS via poort 53: {res}",
+  ap_test_host: "Printernaam {name}: {res}",
+  ap_test_host_adguard: "De printernaam werkt rechtstreeks, maar niet via AdGuard (poort 53). Leeg de cache in AdGuard Home (Instellingen → DNS-instellingen → Cache wissen) en zet 127.0.0.1 bij 'Toegestane clients voor snelheidslimiet' — alle tailnet-vragen komen via 127.0.0.1 binnen.",
   ap_pushed: "Headscale stuurt naar je apparaten: zoekdomeinen {search}; {domain} → {split}.",
   ap_pushed_missing: "Headscale stuurt het printerdomein nog niet naar je apparaten (het tailnet-adres van de router is nog onbekend). Herstart de app.",
   ap_queries: "Laatste DNS-vragen voor {domain} (van je apparaten via het VPN):",
@@ -326,6 +328,8 @@ Object.assign(STRINGS.en, {
   ap_test: "Test the chain", ap_test_ok: "Works: {domain} is answered through port 53 ✓", ap_test_printers: "Printers found: {list}",
   ap_test_fail: "No answer for {domain} through port 53. Is the AdGuard line in place and did you click ‘Save’?",
   ap_test_normal: "Normal DNS through port 53: {res}",
+  ap_test_host: "Printer name {name}: {res}",
+  ap_test_host_adguard: "The printer name works directly but not through AdGuard (port 53). Clear AdGuard Home's cache (Settings → DNS settings → Clear cache) and add 127.0.0.1 to the rate-limit allowlist — all tailnet queries arrive from 127.0.0.1.",
   ap_pushed: "Headscale sends your devices: search domains {search}; {domain} → {split}.",
   ap_pushed_missing: "Headscale doesn't send the printer domain to your devices yet (the router's tailnet address is unknown). Restart the app.",
   ap_queries: "Latest DNS queries for {domain} (from your devices through the VPN):",
@@ -931,6 +935,11 @@ BODIES.airprint = (s) => {
     out.push(note(r.ok ? "ok" : "fail",
       el("p", {}, r.ok ? fmt("ap_test_ok", { domain: d.domain }) : fmt("ap_test_fail", { domain: d.domain })),
       names.length ? el("p", {}, fmt("ap_test_printers", { list: names.join(", ") })) : "",
+      ...(r.hosts || []).map((h) => el("p", { class: "small" }, fmt("ap_test_host", {
+        name: h.name,
+        res: h.via53?.ok ? `✓ ${h.via53.answers.join(", ")}` : `✕ ${h.via53?.error || h.via53?.rcode || ""}`,
+      }))),
+      (r.hosts || []).some((h) => !h.via53?.ok && h.direct?.ok) ? note("warn", t("ap_test_host_adguard")) : "",
       el("p", { class: "muted small" }, fmt("ap_test_normal", { res: r.normal_dns?.ok ? "✓" : (r.normal_dns?.error || r.normal_dns?.rcode || "✕") }))));
     if (r.ok) out.push(note("info", t("ap_ios")));
   }
