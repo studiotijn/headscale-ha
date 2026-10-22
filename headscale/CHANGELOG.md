@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0
+
+- **Generic names.** Multi-tenant mode starts with the networks *Private*, *Work* and *Project*
+  (kinds private / work / project), without users except your admin user. Rename them, change
+  them or add more. Existing installations keep their names; the kind `client` becomes `project`.
+- **Device types.** Every VPN device is a *server*, *workstation* or *phone/tablet* (automatic,
+  or set it yourself in the device dialog). Routers and Edgeboxes are recognised.
+  - Pickers offer servers and equipment first as destinations, and people and their devices
+    first as sources. Phones are not offered as destinations.
+  - A connection to a workstation for anything other than remote desktop, VNC, SSH or file
+    sharing gets a warning; so does one to a phone.
+  - *Register as a server of this network*: the device gets the network's tag
+    (`tag:<network>-server`), is no longer tied to a person and does not expire.
+  - *Add a device* can create a key for a server of a network directly.
+- In the app, "domain" is now called "network".
+- The internal design document with example customer names was removed from the repository.
+
 ## 0.9.0
 
 - **Networks tab always visible.** While access control is off it explains what it does and has
@@ -38,7 +55,7 @@
 - **Multi-tenant networks (optional, option `multi_tenant`, off by default).** Separated network
   domains (private, work, clients) in one Headscale, managed in a new *Networks* tab:
   - Domains with their own users and tags; client locations with an Edgebox each. Sites may share
-    one local subnet (e.g. 172.168.1.0/24); the Edgebox maps it 1:1 onto `10.81.<n>.0/24`.
+    one local subnet (e.g. 192.168.1.0/24); the Edgebox maps it 1:1 onto `10.81.<n>.0/24`.
   - Explicit connections (device / all users of a domain → device, site subnet, Edgebox, port list).
     Everything else is denied; sites and client domains can never start connections to other domains.
   - The ACL policy is generated (grants, hosts, autoApprovers) with a `tests` block holding the

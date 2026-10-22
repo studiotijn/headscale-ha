@@ -151,16 +151,17 @@ device and its ports to every user of your tailnet. Admins always have access.
 ## Multi-tenant networks (optional)
 
 With the option `multi_tenant` (or *Networks → Enable access control*) one Headscale manages several **separated network domains**,
-for example *Private* (home), *Dynteq* (work) and a client such as *SRS/SHP* with several sites.
+for example *Private* (home), *Work* and a *Project* with several sites. These three are created
+when you enable it; rename them, change them or add more (e.g. one domain per customer).
 Off by default; with the option off nothing below changes.
 
 - **Domains.** A domain owns Headscale users (its people's laptops and phones) and tagged
   servers (`tag:<domain>-server`). Your existing `admin_user` becomes the *Private* domain, so
   existing devices keep working. Devices of different domains cannot reach each other.
-- **Locations** (client sites). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
-  behind the local router (e.g. a Teltonika RUTX50). All sites may use the *same* local subnet
-  (e.g. `172.168.1.0/24`, the default of Seyond LiDARs): the Edgebox maps it 1:1 onto a unique
-  VPN subnet, so local `172.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
+- **Locations** (project sites). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
+  behind the local router. All sites may use the *same* local subnet (e.g. `192.168.1.0/24`, or
+  the fixed default address of the equipment you install): the Edgebox maps it 1:1 onto a unique
+  VPN subnet, so local `192.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
   has no 4via6, so this mapping is what makes identical sites possible.
 - **Connections.** Only explicit connections are allowed. In *Networks → Connections* you pick
   *From* (users, devices, all users of a domain, or a group), *To* (users, devices, devices at a
@@ -168,11 +169,16 @@ Off by default; with the option off nothing below changes.
   or your own: `tcp:8010`, `udp:2368`, `tcp:8000-8010`, `icmp`, *All ports*). Every connection can
   be edited in place, switched on/off or copied. The editor shows the effect as a sentence and
   checks it while you type. Replies come back; nothing at a site can start a connection, and a
-  client domain can never be a source towards another domain (the app refuses such a connection).
+  project domain can never be a source towards another domain (the app refuses such a connection).
 - **Groups and port profiles.** Groups bundle users, devices or sites (group → group in one
   connection). A group with site devices can only be a destination. Port profiles are named port
   sets; changing one changes every connection that uses it.
 - **Who can reach what?** Pick anything and see its outgoing and incoming access per connection.
+- **Device types.** Each VPN device is a *server*, *workstation* or *phone/tablet* (set
+  automatically, change it in the device dialog). Servers are the usual destinations; a workstation
+  is normally only a destination for remote desktop, VNC, SSH or file sharing (other ports give a
+  warning), and phones are not offered as destinations. *Register as a server of this network* tags
+  the device (`tag:<network>-server`): it no longer belongs to a person and does not expire.
 - **Access per device.** *Devices → Access* opens one dialog per device: its groups (on/off), what it
   may reach, who may reach it, and the addresses behind it.
 - **Routing follows the open ports.** Add an address behind any VPN device (e.g. a printer behind the
@@ -182,11 +188,11 @@ Off by default; with the option off nothing below changes.
 - **Apply.** Changes are pending until you press *Apply* (the first time: *Activate*; the hand-made
   policy is kept in `/data/hsha/policy-history/`). The app generates the whole ACL policy,
   including a `tests` block with the isolation rules; Headscale refuses a policy whose tests fail.
-  Device changes (a new laptop for a client user) are re-applied automatically.
+  Device changes (a new laptop for a project user) are re-applied automatically.
 - **Edgebox.** *Locations → Edgebox key* gives a one-time `tailscale up` command with the right tag
   and route; *Firewall (nftables)* gives the NAT and an allowlist that only forwards the
   configured connections. Load it with `nft -f`, enable `net.ipv4.ip_forward`, and give the Edgebox
-  its own firewall zone on the RUTX50. Download the firewall again after changing connections and
+  its own firewall zone on the site router. Download the firewall again after changing connections and
   run `conntrack -D -s 100.64.0.0/10` after revoking access.
 - **Routes.** An Edgebox may only have the VPN subnet of its own location approved; anything else is
   withdrawn automatically and logged. Other unexpected routes show up as warnings.
@@ -194,7 +200,7 @@ Off by default; with the option off nothing below changes.
 - **Policy owner.** In this mode the app owns the ACL policy. Changes made in Headplane are reported
   as drift and replaced on the next *Apply*. *Share* in the Home network tab and printers
   elsewhere apply to the Private domain only.
-- `dns_via_home` is ignored in this mode (it would send the DNS of work and client devices home).
+- `dns_via_home` is ignored in this mode (it would send the DNS of work and project devices home).
   Devices that use routes to sites need *accept routes* (`tailscale set --accept-routes`, default
   on Windows/macOS/mobile).
 

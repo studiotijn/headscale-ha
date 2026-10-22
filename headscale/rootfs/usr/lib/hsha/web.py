@@ -151,6 +151,17 @@ class App:
         body = await request.json() if request.can_read_body else {}
         hours = max(1, min(int(body.get("hours", 1)), 24 * 7))
         reusable = bool(body.get("reusable", False))
+        if self.manager.mt is not None and body.get("role") == "server":
+            key = await self.manager.mt.server_key(str(body.get("domain")), hours, reusable, self._actor(request))
+            return web.json_response(
+                {
+                    "key": key,
+                    "hours": hours,
+                    "reusable": reusable,
+                    "login_server": self.opts.server_url_clean,
+                    "command": f"tailscale up --login-server {self.opts.server_url_clean} --auth-key {key}",
+                }
+            )
         if self.manager.mt is not None:
             name = self.manager.mt.user_for(body.get("domain"), body.get("user"))
             user_id = (await hs.ensure_user(name))["id"]
@@ -490,6 +501,8 @@ class App:
             item["domain"] = tenancy.node_domain(mt.model, n)
             item["location"] = tenancy.node_location(mt.model, n)
             item["ipv4"] = tenancy.node_ipv4(n)
+            item["role"] = tenancy.node_role(mt.model, n)
+            item["role_set"] = str(n["id"]) in mt.model.get("node_roles", {})
             view.append(item)
         by_id = {int(n["id"]): n for n in nodes}
         devices = []
@@ -558,6 +571,12 @@ class App:
         self.manager.poke()
         return web.json_response({"ok": True, "applied": applied, "status": mt.status()})
 
+    async def tenancy_tag_server(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        result = await mt.tag_server(int(request.match_info["id"]), self._actor(request))
+        self.manager.poke()
+        return web.json_response(result)
+
     async def tenancy_edge_key(self, request: web.Request) -> web.Response:
         mt = self._mt()
         return web.json_response(await mt.edge_key(request.match_info["id"], self._actor(request)))
@@ -612,12 +631,13 @@ class App:
         app.router.add_get("/api/tenancy/preview", self.tenancy_preview)
         app.router.add_post("/api/tenancy/validate", self.tenancy_validate)
         app.router.add_get("/api/tenancy/access", self.tenancy_access)
+        app.router.add_post("/api/tenancy/nodes/{id:\\d+}/server", self.tenancy_tag_server)
         app.router.add_post("/api/tenancy/apply", self.tenancy_apply)
         app.router.add_get("/api/tenancy/audit", self.tenancy_audit)
         app.router.add_post("/api/tenancy/locations/{id}/key", self.tenancy_edge_key)
         app.router.add_get("/api/tenancy/locations/{id}/nftables", self.tenancy_edge_nft)
         app.router.add_post(
-            "/api/tenancy/{kind:domain|location|device|connection|group|profile}/{action:create|update|delete}",
+            "/api/tenancy/{kind:domain|location|device|connection|group|profile|noderole}/{action:create|update|delete}",
             self.tenancy_change,
         )
         app.router.add_get("/api/printers", self.printers_list)

@@ -251,6 +251,36 @@ class MultiTenant:
         audit.record("edge-key", actor, f"one-time key for {loc['name']} ({tag})")
         return {"tag": tag, "command": policygen.edge_up_command(loc, self.opts.server_url_clean, key)}
 
+    async def tag_server(self, node_id: int, actor: str | None) -> dict:
+        """Turn a device into a server of its network: tagged, no longer tied to a person, no expiry."""
+        nodes = {int(n["id"]): n for n in await hs.nodes()}
+        node = nodes.get(int(node_id))
+        if node is None:
+            raise ModelError("Unknown device")
+        dom = tenancy.node_domain(self.model, node)
+        if dom is None:
+            raise ModelError("This device is not part of a network yet")
+        if tenancy.node_location(self.model, node) or "tag:homerouter" in tenancy.node_tags(node):
+            raise ModelError("Routers and Edgeboxes keep their own tag")
+        tag = tenancy.server_tag(dom)
+        if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
+            raise ModelError("Apply the policy first, so the server tag exists")
+        await hs.set_tags(int(node_id), [tag])
+        name = node.get("given_name") or node.get("name")
+        audit.record("server-tag", actor, f"{name} is now a server ({tag})")
+        return {"tag": tag}
+
+    async def server_key(self, domain_id: str, hours: int, reusable: bool, actor: str | None) -> str:
+        dom = tenancy.domain(self.model, domain_id)
+        if dom is None:
+            raise ModelError("Unknown network")
+        tag = tenancy.server_tag(dom["id"])
+        if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
+            raise ModelError("Apply the policy first, so the server tag exists")
+        key = await hs.create_preauthkey(tags=[tag], reusable=reusable, expiration=f"{hours}h")
+        audit.record("server-key", actor, f"key for a server in {dom['name']} ({tag})")
+        return key
+
     async def edge_nftables(self, loc_id: str) -> str:
         ctx = await self.context()
         sha = (self.model.get("applied") or {}).get("sha256")

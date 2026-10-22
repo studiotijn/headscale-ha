@@ -101,6 +101,10 @@ async def expire_node(node_id: int) -> None:
     await run("nodes", "expire", "--identifier", str(node_id), "--force")
 
 
+async def set_tags(node_id: int, tags: list[str]) -> None:
+    await run("nodes", "tag", "--identifier", str(node_id), "--tags", ",".join(tags))
+
+
 async def approve_routes(node_id: int, routes: list[str]) -> None:
     await run("nodes", "approve-routes", "--identifier", str(node_id), "--routes", ",".join(routes))
 

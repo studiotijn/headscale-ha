@@ -308,3 +308,6 @@ dialog.mt-dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .field > span { font-weight: 500; color: var(--text); }
 .sentence { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--code-bg); }
+.field.grow-field { flex: 1 1 280px; }
+.field > input, .field > select { width: 100%; }
+.row .field > input[type="number"] { width: 100px; }

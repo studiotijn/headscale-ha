@@ -66,7 +66,7 @@ configuration:
   multi_tenant:
     name: Multi-tenant netwerken (optioneel)
     description: >-
-      Beheer meerdere gescheiden netwerkdomeinen (privé, werk, klanten met Edgebox-locaties) in één Headscale. Toegang tussen domeinen staat dicht tot je een verbinding toevoegt. Na aanzetten: tabblad Netwerken → Activeren. dns_via_home wordt dan genegeerd.
+      Beheer meerdere gescheiden netwerkdomeinen (privé, werk, projecten met Edgebox-locaties) in één Headscale. Toegang tussen domeinen staat dicht tot je een verbinding toevoegt. Na aanzetten: tabblad Netwerken → Activeren. dns_via_home wordt dan genegeerd.
   printer_domain:
     name: Printerdomein
     description: DNS-SD-domein voor AirPrint, bijv. printers.home.arpa.

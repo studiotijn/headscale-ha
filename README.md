@@ -5,7 +5,7 @@
 A Home Assistant app (add-on) that turns your Home Assistant into a complete, self-hosted
 [Tailscale](https://tailscale.com) control plane based on [Headscale](https://headscale.net).
 A setup wizard guides and tests every step. You can then reach your home network, printers,
-cameras and media from anywhere, and optionally manage separate networks for work and clients.
+cameras and media from anywhere, and optionally manage separate networks for work and projects.
 
 ## What is this?
 
@@ -81,7 +81,7 @@ what to fix.
 ### Multi-tenant networks (optional)
 
 With the option `multi_tenant` one Headscale manages several **separated network domains**, for
-example *Private*, *Work* and clients with several sites. Domains cannot reach each other; only
+example *Private*, *Work* and *Projects* with several sites (default names, rename them as you like). Domains cannot reach each other; only
 connections you create are allowed. Turn it on in the *Networks* tab (*Enable access control*), then:
 
 - **Connections editor.** Pick *From*, *To* and *Ports* with buttons and chips: users, devices,
@@ -91,6 +91,9 @@ connections you create are allowed. Turn it on in the *Networks* tab (*Enable ac
 - **Groups.** Group to group in one connection.
 - **Port profiles.** SSH, Web, RDP, VNC, Modbus, OPC UA, MQTT and Ping are ready to use, and
   you can make your own. Change a profile and every connection that uses it follows.
+- **Device types.** Servers, workstations and phones are recognised. Servers come first as
+  destinations, phones never; a workstation is normally only a destination for remote desktop or
+  file sharing. Register a server with one click (tagged, does not expire).
 - **Access per device.** *Devices → Access* shows its groups (on/off), what it may reach and who
   may reach it.
 - **Opening a port sets the routing.** Add an address behind any VPN device (a printer or PLC
@@ -98,13 +101,13 @@ connections you create are allowed. Turn it on in the *Networks* tab (*Enable ac
   port to it, so the rest of that network stays unreachable.
 - **Who can reach what?** Pick a user, device, group or site and see what it may reach and who may
   reach it, with a direct *Edit* link.
-- **Client sites with an Edgebox.**
-  - All sites may use the same local subnet. The Edgebox maps it 1:1, so local `172.168.1.y` at
+- **Project sites with an Edgebox.**
+  - All sites may use the same local subnet. The Edgebox maps it 1:1, so local `192.168.1.y` at
     site *n* is `10.81.n.y` over the VPN.
   - One button gives the Edgebox's one-time sign-in command, another its firewall (nftables NAT
     and an allowlist).
 - **Safe by construction:**
-  - Sites and client domains can never start connections to other domains; the editor refuses it.
+  - Sites and project domains can never start connections to other domains; the editor refuses it.
   - The generated ACL policy carries tests with the isolation rules, and Headscale refuses a
     policy whose tests fail.
   - Preview and *Apply* come first; a change made elsewhere is reported (drift detection).

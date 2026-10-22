@@ -9,7 +9,7 @@ Enforcement layers
    The policy carries a ``tests`` block with the traffic matrix, including the
    isolation invariants. Headscale refuses to load a policy whose tests fail.
 2. Route approval: an Edgebox may only offer the VPN subnet of its own location.
-3. nftables on the Edgebox (``edge_nftables``): NAT 10.81.<n>.y <-> 172.168.1.y and an
+3. nftables on the Edgebox (``edge_nftables``): NAT 10.81.<n>.y <-> local .y and an
    allowlist for forwarded traffic, independent of layer 1.
 """
 

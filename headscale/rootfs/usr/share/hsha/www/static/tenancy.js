@@ -4,8 +4,8 @@
 
 Object.assign(STRINGS.nl, {
   tab_networks: "Netwerken",
-  mt_title: "Netwerkdomeinen en toegang",
-  mt_intro: "Elk domein (privé, werk, klant) is gescheiden. Alleen de verbindingen die je hier maakt zijn toegestaan; antwoorden komen terug, nieuwe verbindingen de andere kant op niet. Wijzigingen gaan live na Toepassen. Headscale controleert eerst de ingebouwde tests.",
+  mt_title: "Netwerken en toegang",
+  mt_intro: "Elk netwerk (privé, werk, project) is gescheiden. Alleen de verbindingen die je hier maakt zijn toegestaan; antwoorden komen terug, nieuwe verbindingen de andere kant op niet. Wijzigingen gaan live na Toepassen. Headscale controleert eerst de ingebouwde tests.",
   mt_state_off: "Nog niet geactiveerd: het huidige beleid is nog actief",
   mt_state_ok: "Actief", mt_state_pending: "Wijzigingen nog niet toegepast", mt_state_drift: "Beleid is buiten de app gewijzigd (bv. in Headplane)",
   mt_applied: "Toegepast: revisie {rev}, {tests} tests, {when} door {by}",
@@ -15,7 +15,7 @@ Object.assign(STRINGS.nl, {
   mt_check_ok: "Controle door Headscale geslaagd", mt_check_fail: "Headscale weigert dit beleid:",
   mt_tests: "{n} tests (verkeersmatrix)", mt_policy_text: "Gegenereerd beleid",
   mt_matrix: "Verkeersmatrix (bron → bestemming)", mt_internal: "intern", mt_explicit: "alleen expliciet", mt_none: "geen toegang",
-  sub_connections: "Verbindingen", sub_access: "Wie mag wat?", sub_groups: "Groepen en poorten", sub_sites: "Locaties", sub_domains: "Domeinen en apparaten", sub_log: "Logboek",
+  sub_connections: "Verbindingen", sub_access: "Wie mag wat?", sub_groups: "Groepen en poorten", sub_sites: "Locaties", sub_domains: "Netwerken en apparaten", sub_log: "Logboek",
   mt_new_connection: "Nieuwe verbinding", mt_search: "Zoeken…", mt_no_connections: "Nog geen verbindingen. Alles tussen domeinen is dicht.",
   mt_from: "Van", mt_to: "Naar", mt_ports: "Poorten", mt_name: "Naam", mt_note: "Notitie", mt_enabled: "Actief",
   mt_edit: "Bewerken", mt_copy: "Kopie", mt_delete: "Verwijderen", mt_save: "Opslaan", mt_cancel: "Annuleren", mt_new: "Nieuw",
@@ -28,22 +28,22 @@ Object.assign(STRINGS.nl, {
   grp_people: "Gebruikers", grp_devices: "Apparaten", grp_groups: "Groepen",
   mt_access_intro: "Kies een gebruiker, apparaat, groep of locatie en zie wat die mag bereiken en door wie die bereikbaar is.",
   mt_subject: "Kies…", mt_out: "Mag naar", mt_in: "Bereikbaar vanaf", mt_nothing: "Niets.",
-  mt_internal_note: "Plus alles binnen het eigen domein ({x}).", mt_new_from: "Nieuwe verbinding vanaf hier", mt_new_to: "Nieuwe verbinding hierheen",
+  mt_internal_note: "Plus alles binnen het eigen netwerk ({x}).", mt_new_from: "Nieuwe verbinding vanaf hier", mt_new_to: "Nieuwe verbinding hierheen",
   mt_groups: "Groepen", mt_groups_intro: "Een groep bundelt gebruikers, apparaten of locaties, zodat je één verbinding maakt voor groep → groep. Een groep met apparaten op een locatie kan alleen bestemming zijn.",
   mt_members: "Leden", mt_used_by: "gebruikt in {n} verbinding(en)",
   mt_profiles: "Poortprofielen", mt_profiles_intro: "Vaste sets poorten. Pas je een profiel aan, dan veranderen alle verbindingen die het gebruiken mee.",
   mt_profile_ports: "Poorten (bv. tcp:80, tcp:443, udp:2368, icmp)",
-  mt_locations: "Locaties (Edgeboxes)", mt_loc_intro: "Alle locaties mogen hetzelfde lokale subnet gebruiken (bv. 172.168.1.0/24). De Edgebox vertaalt 1-op-1: lokaal 172.168.1.y is via het VPN 10.81.<nummer>.y.",
-  mt_number: "Nummer", mt_domain: "Domein", mt_local: "Lokaal subnet", mt_vpn: "VPN-subnet", mt_vpn_auto: "automatisch 10.81.<nr>.0/24",
+  mt_locations: "Locaties (Edgeboxes)", mt_loc_intro: "Alle locaties mogen hetzelfde lokale subnet gebruiken (bv. 192.168.1.0/24). De Edgebox vertaalt 1-op-1: lokaal 192.168.1.y is via het VPN 10.81.<nummer>.y.",
+  mt_number: "Nummer", mt_domain: "Netwerk", mt_local: "Lokaal subnet", mt_vpn: "VPN-subnet", mt_vpn_auto: "automatisch 10.81.<nr>.0/24",
   mt_iface: "LAN-interface Edgebox", mt_edge: "Edgebox", mt_edge_none: "nog niet aangemeld", mt_route_ok: "route actief", mt_route_wait: "route niet goedgekeurd",
   mt_edge_key: "Sleutel Edgebox", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Voer uit op de Edgebox (sleutel 1 uur geldig, eenmalig):",
-  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet op de RUTX50 de Edgebox in een eigen firewallzone.",
+  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet de Edgebox op de router van de locatie in een eigen firewallzone.",
   mt_devices: "Apparaten op locaties", mt_local_ip: "Lokaal IP", mt_vpn_ip: "VPN-IP", mt_location: "Locatie",
-  mt_domains: "Domeinen", mt_kind: "Soort", mt_users: "Gebruikers", mt_internal_policy: "Intern beleid",
-  kind_private: "privé", kind_work: "werk", kind_client: "klant",
-  internal_full: "leden bereiken alles binnen het domein", internal_none: "alleen expliciete verbindingen",
-  mt_users_hint: "Headscale-gebruikers, met komma's. Bij een klant: één gebruiker per medewerker.",
-  mt_nodes: "Apparaten in het VPN", mt_unassigned: "zonder domein (geen toegang)",
+  mt_domains: "Netwerken", mt_kind: "Soort", mt_users: "Gebruikers", mt_internal_policy: "Intern beleid",
+  kind_private: "privé", kind_work: "werk", kind_project: "project",
+  internal_full: "leden bereiken alles binnen het netwerk", internal_none: "alleen expliciete verbindingen",
+  mt_users_hint: "Headscale-gebruikers, met komma's. Bij een project: één gebruiker per persoon.",
+  mt_nodes: "Apparaten in het VPN", mt_unassigned: "zonder netwerk (geen toegang)",
   mt_add_device: "Apparaat aanmelden", mt_user: "Gebruiker",
   mt_audit: "Logboek", mt_none_yet: "Nog niets.", mt_route_warn: "Routecontrole",
   mt_disabled: "Multi-tenant staat uit. Zet de app-optie multi_tenant aan (tabblad Configuratie van de app).",
@@ -63,12 +63,18 @@ Object.assign(STRINGS.nl, {
   mt_give_access: "Toegang geven", mt_add_access: "Toegang toevoegen",
   mt_devices_all: "Apparaten op locaties en achter routers",
   mt_add_behind: "Adres achter dit apparaat toevoegen", mt_used_in: "Open via:",
+  mt_role: "Type", role_server: "Server", role_workstation: "Werkplek", role_mobile: "Telefoon/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatisch ({x})",
+  mt_role_hint: "Servers zijn de gewone bestemmingen. Een werkplek is meestal alleen bestemming voor Remote Desktop, VNC of bestanden delen; een telefoon nooit.",
+  mt_make_server: "Registreren als server van dit netwerk", mt_make_server_hint: "Aanbevolen voor servers: het apparaat krijgt de tag van het netwerk, hangt niet meer aan een persoon en verloopt niet.",
+  mt_made_server: "Is nu een server.", mt_for: "Voor", mt_server_of: "🗄 Server in {x} (getagd, verloopt niet)",
+  grp_servers: "Servers", grp_behind: "Achter routers", grp_ws: "Werkplekken (RDP/VNC/bestanden)", grp_people_src: "Personen en hun apparaten",
+  mt_server_register: "Servers meld je aan met een sleutel, niet via de browser.",
 });
 
 Object.assign(STRINGS.en, {
   tab_networks: "Networks",
-  mt_title: "Network domains and access",
-  mt_intro: "Every domain (private, work, client) is separated. Only the connections you make here are allowed; replies come back, new connections in the other direction do not. Changes go live when you press Apply. Headscale first runs the built-in tests.",
+  mt_title: "Networks and access",
+  mt_intro: "Every network (private, work, project) is separated. Only the connections you make here are allowed; replies come back, new connections in the other direction do not. Changes go live when you press Apply. Headscale first runs the built-in tests.",
   mt_state_off: "Not activated yet: the current policy is still in effect",
   mt_state_ok: "Active", mt_state_pending: "Changes not applied yet", mt_state_drift: "Policy was changed outside the app (e.g. in Headplane)",
   mt_applied: "Applied: revision {rev}, {tests} tests, {when} by {by}",
@@ -78,7 +84,7 @@ Object.assign(STRINGS.en, {
   mt_check_ok: "Headscale accepted the policy", mt_check_fail: "Headscale refuses this policy:",
   mt_tests: "{n} tests (traffic matrix)", mt_policy_text: "Generated policy",
   mt_matrix: "Traffic matrix (source → destination)", mt_internal: "internal", mt_explicit: "explicit only", mt_none: "no access",
-  sub_connections: "Connections", sub_access: "Who can reach what?", sub_groups: "Groups and ports", sub_sites: "Locations", sub_domains: "Domains and devices", sub_log: "Log",
+  sub_connections: "Connections", sub_access: "Who can reach what?", sub_groups: "Groups and ports", sub_sites: "Locations", sub_domains: "Networks and devices", sub_log: "Log",
   mt_new_connection: "New connection", mt_search: "Search…", mt_no_connections: "No connections yet. Everything between domains is closed.",
   mt_from: "From", mt_to: "To", mt_ports: "Ports", mt_name: "Name", mt_note: "Note", mt_enabled: "Enabled",
   mt_edit: "Edit", mt_copy: "Copy", mt_delete: "Delete", mt_save: "Save", mt_cancel: "Cancel", mt_new: "New",
@@ -91,22 +97,22 @@ Object.assign(STRINGS.en, {
   grp_people: "Users", grp_devices: "Devices", grp_groups: "Groups",
   mt_access_intro: "Pick a user, device, group or location and see what it may reach and who may reach it.",
   mt_subject: "Choose…", mt_out: "May reach", mt_in: "Reachable from", mt_nothing: "Nothing.",
-  mt_internal_note: "Plus everything inside its own domain ({x}).", mt_new_from: "New connection from here", mt_new_to: "New connection to here",
+  mt_internal_note: "Plus everything inside its own network ({x}).", mt_new_from: "New connection from here", mt_new_to: "New connection to here",
   mt_groups: "Groups", mt_groups_intro: "A group bundles users, devices or locations, so one connection covers group → group. A group with devices at a location can only be a destination.",
   mt_members: "Members", mt_used_by: "used in {n} connection(s)",
   mt_profiles: "Port profiles", mt_profiles_intro: "Fixed sets of ports. When you change a profile, every connection that uses it changes too.",
   mt_profile_ports: "Ports (e.g. tcp:80, tcp:443, udp:2368, icmp)",
-  mt_locations: "Locations (Edgeboxes)", mt_loc_intro: "All locations may use the same local subnet (e.g. 172.168.1.0/24). The Edgebox maps it 1:1: local 172.168.1.y is 10.81.<number>.y over the VPN.",
-  mt_number: "Number", mt_domain: "Domain", mt_local: "Local subnet", mt_vpn: "VPN subnet", mt_vpn_auto: "automatic 10.81.<no>.0/24",
+  mt_locations: "Locations (Edgeboxes)", mt_loc_intro: "All locations may use the same local subnet (e.g. 192.168.1.0/24). The Edgebox maps it 1:1: local 192.168.1.y is 10.81.<number>.y over the VPN.",
+  mt_number: "Number", mt_domain: "Network", mt_local: "Local subnet", mt_vpn: "VPN subnet", mt_vpn_auto: "automatic 10.81.<no>.0/24",
   mt_iface: "Edgebox LAN interface", mt_edge: "Edgebox", mt_edge_none: "not signed in yet", mt_route_ok: "route active", mt_route_wait: "route not approved",
   mt_edge_key: "Edgebox key", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Run on the Edgebox (key valid for 1 hour, single use):",
-  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the Edgebox in its own firewall zone on the RUTX50.",
+  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the Edgebox in its own firewall zone on the location's router.",
   mt_devices: "Devices at locations", mt_local_ip: "Local IP", mt_vpn_ip: "VPN IP", mt_location: "Location",
-  mt_domains: "Domains", mt_kind: "Kind", mt_users: "Users", mt_internal_policy: "Internal policy",
-  kind_private: "private", kind_work: "work", kind_client: "client",
-  internal_full: "members reach everything in the domain", internal_none: "explicit connections only",
-  mt_users_hint: "Headscale users, comma separated. For a client: one user per employee.",
-  mt_nodes: "Devices in the VPN", mt_unassigned: "no domain (no access)",
+  mt_domains: "Networks", mt_kind: "Kind", mt_users: "Users", mt_internal_policy: "Internal policy",
+  kind_private: "private", kind_work: "work", kind_project: "project",
+  internal_full: "members reach everything in the network", internal_none: "explicit connections only",
+  mt_users_hint: "Headscale users, comma separated. For a project: one user per person.",
+  mt_nodes: "Devices in the VPN", mt_unassigned: "no network (no access)",
   mt_add_device: "Add a device", mt_user: "User",
   mt_audit: "Log", mt_none_yet: "Nothing yet.", mt_route_warn: "Route check",
   mt_disabled: "Multi-tenant mode is off. Enable the app option multi_tenant (the app's Configuration tab).",
@@ -126,6 +132,12 @@ Object.assign(STRINGS.en, {
   mt_give_access: "Give access", mt_add_access: "Add access",
   mt_devices_all: "Devices at locations and behind routers",
   mt_add_behind: "Add an address behind this device", mt_used_in: "Open through:",
+  mt_role: "Type", role_server: "Server", role_workstation: "Workstation", role_mobile: "Phone/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatic ({x})",
+  mt_role_hint: "Servers are the usual destinations. A workstation is usually only a destination for remote desktop, VNC or file sharing; a phone never.",
+  mt_make_server: "Register as a server of this network", mt_make_server_hint: "Recommended for servers: the device gets the network's tag, is no longer tied to a person and does not expire.",
+  mt_made_server: "Is now a server.", mt_for: "For", mt_server_of: "🗄 Server in {x} (tagged, does not expire)",
+  grp_servers: "Servers", grp_behind: "Behind routers", grp_ws: "Workstations (RDP/VNC/files)", grp_people_src: "People and their devices",
+  mt_server_register: "Servers sign in with a key, not through the browser.",
 });
 
 let mtData = null;
@@ -142,6 +154,8 @@ const mtNode = (id) => mtData.nodes.find((n) => String(n.id) === String(id));
 const userDomain = (u) => mtData.model.domains.find((d) => d.users.includes(u));
 
 const ICON = { user: "👤", domain: "🏢", node: "💻", group: "👥", dev: "📡", loc: "📍", edge: "🛰" };
+const ROLE_ICON = { server: "🗄", workstation: "💻", mobile: "📱", router: "🏠", edgebox: "🛰" };
+const nodeIcon = (n) => ROLE_ICON[(n || {}).role] || ICON.node;
 
 function refLabel(ref, side = "dst") {
   const [kind, key] = ref.split(/:(.*)/s);
@@ -175,7 +189,11 @@ function chip(text, { kind, onRemove, title } = {}) {
   if (onRemove) c.append(el("button", { type: "button", class: "chip-x", "aria-label": "remove", onclick: onRemove }, "×"));
   return c;
 }
-const refChip = (ref, side, onRemove) => chip(refLabel(ref, side), { kind: ref.split(":")[0], onRemove });
+const refChip = (ref, side, onRemove) => {
+  const c = chip(refLabel(ref, side), { kind: ref.split(":")[0], onRemove });
+  if (ref.startsWith("node:")) c.firstChild.textContent = `${nodeIcon(mtNode(ref.slice(5)))} `;
+  return c;
+};
 const portChips = (ports) => ports.map((p) => chip(portLabel(p), { kind: p.startsWith("profile:") ? "profile" : "port",
   title: p.startsWith("profile:") ? ((mtProfile(p.slice(8)) || {}).ports || []).join(", ") : "" }));
 
@@ -186,10 +204,16 @@ function refOptions(mode) {
   const nodesOf = (d) => mtData.nodes.filter((n) => n.domain === d.id && !n.location && n.ipv4);
   for (const d of mtData.model.domains) {
     const opts = [];
-    if (d.users.length) opts.push({ value: `domain:${d.id}`, label: `${ICON.domain} ${fmt(mode === "src" ? "ref_domain_src" : "ref_domain_dst", { x: d.name })}` });
-    d.users.forEach((u) => opts.push({ value: `user:${u}`, label: `${ICON.user} ${u}` }));
-    nodesOf(d).forEach((n) => opts.push({ value: `node:${n.id}`, label: `${ICON.node} ${n.name} (${n.ipv4})` }));
-    if (mode !== "src") {
+    const nodeOpt = (n, suffix = "") => ({ value: `node:${n.id}`, label: `${nodeIcon(n)} ${n.name} (${n.ipv4})${suffix}` });
+    const ofRole = (...roles) => nodesOf(d).filter((n) => roles.includes(n.role));
+    const all = d.users.length ? [{ value: `domain:${d.id}`, label: `${ICON.domain} ${fmt(mode === "src" ? "ref_domain_src" : "ref_domain_dst", { x: d.name })}` }] : [];
+    const users = d.users.map((u) => ({ value: `user:${u}`, label: `${ICON.user} ${u}` }));
+    if (mode === "src") {
+      // People first: they start connections. Servers can be a source too (e.g. backups).
+      opts.push(...all, ...users, ...ofRole("workstation", "mobile").map((n) => nodeOpt(n)), ...ofRole("server", "router").map((n) => nodeOpt(n)));
+    } else {
+      // Servers and equipment first: they are what people connect to.
+      opts.push(...ofRole("server", "router").map((n) => nodeOpt(n)));
       mtData.model.devices.filter((x) => x.via && (mtNode(x.via) || {}).domain === d.id).forEach((x) =>
         opts.push({ value: `dev:${x.id}`, label: `${ICON.dev} ${x.name} · ${devWhere(x)} (${x.ip})` }));
       for (const l of mtData.model.locations.filter((x) => x.domain === d.id)) {
@@ -198,6 +222,9 @@ function refOptions(mode) {
         opts.push({ value: `loc:${l.id}`, label: `${ICON.loc} ${fmt("ref_loc", { x: l.name })}` });
         opts.push({ value: `edge:${l.id}`, label: `${ICON.edge} ${fmt("ref_edge", { x: l.name })}` });
       }
+      opts.push(...ofRole("workstation").map((n) => nodeOpt(n, ` · ${t("role_workstation").toLowerCase()}`)));
+      if (mode === "member") opts.push(...ofRole("mobile").map((n) => nodeOpt(n)), ...users, ...all);
+      else opts.push(...all, ...users);
     }
     if (opts.length) groups.push({ group: d.name, options: opts });
   }
@@ -310,7 +337,7 @@ async function mtSave(kind, action, data) {
 function editConnection(conn, preset = {}) {
   const isNew = !conn || !conn.id;
   const c = { name: "", src: [], dst: [], ports: [], enabled: true, note: "", ...(conn || {}), ...preset };
-  const name = mtIn({ value: c.name, required: "", placeholder: "Thuis-pc → LiDAR's" });
+  const name = mtIn({ value: c.name, required: "", placeholder: "Laptop → Camera's" });
   const enabled = mtIn({ type: "checkbox" }); enabled.checked = c.enabled !== false;
   const noteIn = mtIn({ value: c.note || "" });
   const sentence = el("p", { class: "sentence" });
@@ -532,12 +559,12 @@ function vpnFor(loc, ip) {
 
 function editLocation(l) {
   const isNew = !l;
-  const clients = mtData.model.domains.filter((d) => d.kind === "client").map((d) => ({ value: d.id, label: d.name }));
+  const clients = mtData.model.domains.filter((d) => d.kind === "project").map((d) => ({ value: d.id, label: d.name }));
   const next = Math.max(0, ...mtData.model.locations.map((x) => x.number || 0)) + 1;
   const dom = selectEl(clients, l ? l.domain : undefined, isNew ? {} : { disabled: "" });
   const num = mtIn({ type: "number", min: "1", max: "254", value: String(l ? l.number : next), required: "" });
   const name = mtIn({ value: l ? l.name : "", required: "", placeholder: `Locatie ${next}` });
-  const local = mtIn({ value: l ? l.local_subnet : "172.168.1.0/24", required: "" });
+  const local = mtIn({ value: l ? l.local_subnet : "192.168.1.0/24", required: "" });
   const vpn = mtIn({ value: l ? l.vpn_subnet : "", placeholder: t("mt_vpn_auto") });
   const iface = mtIn({ value: l ? l.lan_iface : "eth0", required: "" });
   const noteIn = mtIn({ value: l ? l.note || "" : "" });
@@ -560,8 +587,8 @@ function editDevice(d, preset = {}) {
     el("optgroup", { label: t("mt_via_node") }, ...mtData.nodes.filter((n) => !n.location && n.ipv4).map((n) =>
       el("option", { value: `node:${n.id}` }, `${n.name}${n.domain ? ` · ${(mtDomain(n.domain) || {}).name}` : ""}`))));
   if (cur.location) where.value = `loc:${cur.location}`; else if (cur.via) where.value = `node:${cur.via}`;
-  const name = mtIn({ value: cur.name || "", required: "", placeholder: "LiDAR 1" });
-  const ip = mtIn({ value: cur.ip || "", required: "", placeholder: "172.168.1.10", pattern: "\\d+\\.\\d+\\.\\d+\\.\\d+" });
+  const name = mtIn({ value: cur.name || "", required: "", placeholder: "Camera 1" });
+  const ip = mtIn({ value: cur.ip || "", required: "", placeholder: "192.168.1.10", pattern: "\\d+\\.\\d+\\.\\d+\\.\\d+" });
   const noteIn = mtIn({ value: cur.note || "" });
   const vpnOut = el("strong", { class: "mono" });
   const upd = () => {
@@ -613,6 +640,24 @@ async function openNodeAccess(nodeId) {
     const conns = Object.fromEntries(mtData.model.connections.map((c) => [c.id, c]));
     const info = el("p", { class: "muted" }, [n.domain ? (mtDomain(n.domain) || {}).name : t("mt_unassigned"),
       n.ipv4, n.online ? t("online") : t("offline"), n.tags.join(", ") || n.user].filter(Boolean).join(" · "));
+    let roleBox = "";
+    if (!["router", "edgebox"].includes(n.role)) {
+      const tagged = n.tags.some((x) => x.endsWith("-server"));
+      const sel = selectEl([
+        { value: "auto", label: fmt("role_auto", { x: t(`role_${n.role}`) }) },
+        ...["server", "workstation", "mobile"].map((r) => ({ value: r, label: `${ROLE_ICON[r]} ${t(`role_${r}`)}` })),
+      ], n.role_set ? n.role : "auto", tagged ? { disabled: "" } : {});
+      sel.addEventListener("change", () => mtSave("noderole", "update", { id: n.id, role: sel.value }).catch((e) => banner(e.message)));
+      const tagBtn = el("button", { class: "btn secondary small", type: "button" }, t("mt_make_server"));
+      tagBtn.addEventListener("click", async () => {
+        busy(tagBtn, true);
+        try { await api(`tenancy/nodes/${n.id}/server`, { method: "POST" }); banner(t("mt_made_server"), "ok"); mtData = await api("tenancy"); refresh(); }
+        catch (err) { banner(err.message); } finally { busy(tagBtn, false); }
+      });
+      roleBox = el("div", {}, el("div", { class: "row tight" }, mtField(t("mt_role"), sel),
+        n.role === "server" && !tagged && n.domain ? tagBtn : ""),
+        el("p", { class: "muted small" }, n.role === "server" && !tagged && n.domain ? t("mt_make_server_hint") : t("mt_role_hint")));
+    }
     // groups
     const groups = (mtData.model.groups || []);
     const gbox = el("div", { class: "chips" }, ...(groups.length ? groups.map((g) => {
@@ -641,7 +686,7 @@ async function openNodeAccess(nodeId) {
           editDevice(null, { via: String(n.id), ip: ipOnly, name: "" });
         } }, `+ ${r}`)))) : "",
       el("button", { class: "btn secondary small", type: "button", onclick: () => editDevice(null, { via: String(n.id) }) }, `+ ${t("mt_add_behind")}`));
-    body.replaceChildren(info,
+    body.replaceChildren(info, roleBox,
       el("h3", {}, t("mt_node_groups")), gbox,
       el("div", { class: "two-col" },
         el("div", {}, el("h3", {}, t("mt_out")), ...rows(acc.outgoing, "dst"),
@@ -662,7 +707,7 @@ function mtSitesView() {
   const out = el("div");
   const locCard = el("article", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, t("mt_locations")),
-      mtData.model.domains.some((d) => d.kind === "client") ? el("button", { class: "btn", type: "button", onclick: () => editLocation(null) }, `+ ${t("mt_new")}`) : ""),
+      mtData.model.domains.some((d) => d.kind === "project") ? el("button", { class: "btn", type: "button", onclick: () => editLocation(null) }, `+ ${t("mt_new")}`) : ""),
     el("p", { class: "muted" }, t("mt_loc_intro")),
     mtTable([t("mt_name"), `${t("mt_local")} → ${t("mt_vpn")}`, t("mt_edge"), ""], mtData.model.locations.map((l) => {
       const keyBtn = el("button", { class: "btn small", type: "button" }, t("mt_edge_key"));
@@ -701,7 +746,7 @@ function editDomain(d) {
   const isNew = !d;
   const id = mtIn({ value: d ? d.id : "", required: "", pattern: "[a-z][a-z0-9-]{0,19}", ...(isNew ? {} : { readonly: "" }) });
   const name = mtIn({ value: d ? d.name : "", required: "" });
-  const kind = selectEl(["private", "work", "client"].map((k) => ({ value: k, label: t(`kind_${k}`) })), d ? d.kind : "client");
+  const kind = selectEl(["private", "work", "project"].map((k) => ({ value: k, label: t(`kind_${k}`) })), d ? d.kind : "project");
   const users = mtIn({ value: d ? d.users.join(", ") : "" });
   const internal = selectEl(["full", "none"].map((k) => ({ value: k, label: t(`internal_${k}`) })), d ? d.internal : "none");
   openDialog(isNew ? t("mt_domains") : d.name, el("div", { class: "form-grid" },
@@ -722,8 +767,9 @@ function mtDomainsView() {
       el("td", { class: "small" }, t(`internal_${d.internal}`)),
       el("td", { class: "actions" }, editBtn((e) => { e.stopPropagation(); editDomain(d); }))))));
 
-  const doms = mtData.model.domains.filter((d) => d.users.length);
-  const who = el("select", {}, ...doms.map((d) => el("optgroup", { label: d.name }, ...d.users.map((u) => el("option", { value: `${d.id}|${u}` }, u)))));
+  const who = el("select", {}, ...mtData.model.domains.map((d) => el("optgroup", { label: d.name },
+    ...d.users.map((u) => el("option", { value: `${d.id}|${u}` }, `👤 ${u}`)),
+    el("option", { value: `${d.id}|__server__` }, fmt("mt_server_of", { x: d.name })))));
   const hours = mtIn({ type: "number", min: "1", max: "168", value: "1" });
   const out = el("div");
   const keyBtn = el("button", { class: "btn", type: "button" }, t("create_key"));
@@ -731,31 +777,34 @@ function mtDomainsView() {
     busy(keyBtn, true);
     try {
       const [domain, user] = who.value.split("|");
-      const r = await api("authkey", { method: "POST", body: { domain, user, hours: Number(hours.value) || 1 } });
+      const body = user === "__server__" ? { domain, role: "server" } : { domain, user };
+      const r = await api("authkey", { method: "POST", body: { ...body, hours: Number(hours.value) || 1 } });
       out.replaceChildren(copyable(r.command), el("p", { class: "muted small" }, t("key_note")));
     } catch (err) { banner(err.message); } finally { busy(keyBtn, false); }
   });
-  const authId = mtIn({ placeholder: "headscale auth register --auth-id …", class: "grow-input" });
+  const authId = mtIn({ placeholder: "headscale auth register --auth-id …" });
   const regBtn = el("button", { class: "btn secondary", type: "button" }, t("approve"));
   regBtn.addEventListener("click", async () => {
     busy(regBtn, true);
     try {
       const [domain, user] = who.value.split("|");
+      if (user === "__server__") throw new Error(t("mt_server_register"));
       await api("register", { method: "POST", body: { domain, user, auth_id: authId.value } });
       authId.value = ""; banner(t("registered"), "ok"); await loadNetworks();
     } catch (err) { banner(err.message); } finally { busy(regBtn, false); }
   });
   const nodeCard = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
-    mtTable([t("name"), t("mt_domain"), "IP", t("status"), t("routes"), ""], mtData.nodes.map((n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
+    mtTable([t("name"), t("mt_role"), t("mt_domain"), "IP", t("status"), t("routes"), ""], mtData.nodes.map((n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
       el("td", {}, el("strong", {}, n.name), el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))),
+      el("td", { class: "nowrap" }, `${nodeIcon(n)} ${t(`role_${n.role}`)}`),
       el("td", {}, n.domain ? (mtDomain(n.domain) || {}).name + (n.location ? ` · ${(mtLoc(n.location) || {}).name}` : "") : el("span", { class: "warn-text" }, t("mt_unassigned"))),
       el("td", { class: "mono" }, n.ipv4 || ""),
       el("td", {}, el("span", { class: `pill ${n.online ? "ok" : ""}` }, n.online ? t("online") : t("offline"))),
       el("td", { class: "mono" }, n.approved_routes.join("\n")),
       el("td", { class: "actions" }, el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); openNodeAccess(n.id); } }, t("mt_access_btn")))))),
     el("h3", {}, t("mt_add_device")),
-    el("div", { class: "row" }, mtField(t("mt_user"), who), mtField(t("valid_for"), hours), keyBtn), out,
-    el("div", { class: "row" }, mtField(t("mt_user"), who.cloneNode(true)), mtField(t("register_label"), authId), regBtn));
+    el("div", { class: "row" }, mtField(t("mt_for"), who), mtField(t("valid_for"), hours), keyBtn), out,
+    el("div", { class: "row" }, mtField(t("mt_for"), who.cloneNode(true)), Object.assign(mtField(t("register_label"), authId), { className: "field grow-field" }), regBtn));
   // keep both user selects in sync (the second one is used for approvals)
   const who2 = nodeCard.querySelectorAll("select")[1];
   who2.addEventListener("change", () => { who.value = who2.value; });

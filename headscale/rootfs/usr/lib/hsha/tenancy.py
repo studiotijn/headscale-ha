@@ -1,4 +1,4 @@
-"""Multi-tenant model: network domains, client locations, LAN devices and connections.
+"""Multi-tenant model: network domains, project locations, LAN devices and connections.
 
 Only used with the app option ``multi_tenant``. The model is the single source of
 truth for the ACL policy in that mode (see policygen.py). It is stored in
@@ -6,11 +6,11 @@ truth for the ACL policy in that mode (see policygen.py). It is stored in
 
 Terms
 -----
-domain      A network domain (Private, Dynteq, a client such as SRS/SHP). Its user-owned
+domain      A network domain (e.g. Private, Work, a Project with sites). Its user-owned
             devices belong to the Headscale users listed in ``users``; its servers carry
             ``tag:<domain>-server``.
-location    A client site with an Edgebox (``tag:<domain>-<location>-edge``). All sites may use
-            the same local subnet (e.g. 172.168.1.0/24); the Edgebox maps it 1:1 onto a unique
+location    A project site with an Edgebox (``tag:<domain>-<location>-edge``). All sites may use
+            the same local subnet (e.g. 192.168.1.0/24); the Edgebox maps it 1:1 onto a unique
             VPN subnet (10.81.<n>.0/24), so local host .y is reachable as 10.81.<n>.y.
 device      A named host behind a location (local IP; the VPN IP follows from the mapping).
 connection  An explicitly allowed flow: source (a node or all users of a domain) to a
@@ -30,7 +30,8 @@ from . import paths
 from .store import read_json, write_json
 
 SCHEMA = 1
-KINDS = ("private", "work", "client")
+KINDS = ("private", "work", "project")
+LEGACY_KINDS = {"client": "project"}  # 0.7.0-0.9.0
 INTERNAL = ("full", "none")
 TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 
@@ -64,13 +65,14 @@ def default_model(admin_user: str) -> dict:
                 "internal": "full",
                 "home": True,
             },
-            {"id": "dynteq", "name": "Dynteq", "kind": "work", "users": ["dynteq"], "internal": "full", "home": False},
-            {"id": "srs", "name": "SRS/SHP", "kind": "client", "users": [], "internal": "none", "home": False},
+            {"id": "work", "name": "Work", "kind": "work", "users": [], "internal": "full", "home": False},
+            {"id": "project", "name": "Project", "kind": "project", "users": [], "internal": "none", "home": False},
         ],
         "locations": [],
         "devices": [],
         "connections": [],
         "groups": [],
+        "node_roles": {},
         "port_profiles": default_profiles(),
         "manual_grants": [],
         "applied": None,
@@ -105,6 +107,9 @@ def load(admin_user: str) -> dict:
     ):
         model.setdefault(key, default)
     model.setdefault("port_profiles", default_profiles())
+    model.setdefault("node_roles", {})
+    for d in model["domains"]:  # "client" was renamed to "project"
+        d["kind"] = LEGACY_KINDS.get(d.get("kind"), d.get("kind"))
     for c in model["connections"]:  # 0.7.0 stored one source and one destination as strings
         c["src"], c["dst"] = as_list(c.get("src")), as_list(c.get("dst"))
     return model
@@ -246,6 +251,41 @@ def node_domain(model: dict, node: dict) -> str | None:
     return next((d["id"] for d in model["domains"] if user in d.get("users", [])), None)
 
 
+# What a VPN device is, which decides how the app offers it. Servers are the usual destinations;
+# workstations are mostly sources and only a destination for remote desktop or file sharing;
+# phones and tablets are never a destination.
+ROLES = ("server", "workstation", "mobile")
+WORKSTATION_PORTS = {"tcp:3389", "tcp:5900", "tcp:445", "tcp:22", "icmp:*", "3389", "5900", "445", "22"}
+WORKSTATION_PROFILES = {"rdp", "vnc", "smb", "ssh", "ping"}
+_MOBILE_NAME = re.compile(r"iphone|ipad|android|pixel|galaxy|phone|tablet|ipod|sm-[a-z0-9]", re.I)
+
+
+def node_role(model: dict, node: dict) -> str:
+    """server / workstation / mobile, or router / edgebox for the app's own routers."""
+    tags = node_tags(node)
+    if "tag:homerouter" in tags:
+        return "router"
+    if node_location(model, node):
+        return "edgebox"
+    if any(tag.endswith("-server") for tag in tags):
+        return "server"
+    chosen = model.get("node_roles", {}).get(str(node["id"]))
+    if chosen in ROLES:
+        return chosen
+    name = f"{node.get('given_name') or ''} {node.get('name') or ''}"
+    return "mobile" if _MOBILE_NAME.search(name) else "workstation"
+
+
+def _workstation_ports_only(model: dict, ports) -> bool:
+    for p in as_list(ports):
+        if p.startswith("profile:"):
+            if p.split(":", 1)[1] not in WORKSTATION_PROFILES:
+                return False
+        elif p not in WORKSTATION_PORTS:
+            return False
+    return True
+
+
 def node_location(model: dict, node: dict) -> str | None:
     tags = node_tags(node)
     return next((loc["id"] for loc in model["locations"] if edge_tag(loc) in tags), None)
@@ -275,7 +315,7 @@ def _net(value: str, what: str) -> ipaddress.IPv4Network:
     try:
         net = ipaddress.ip_network(str(value).strip(), strict=True)
     except ValueError as exc:
-        raise ModelError(f"{what}: '{value}' is not a valid IPv4 network (e.g. 172.168.1.0/24)") from exc
+        raise ModelError(f"{what}: '{value}' is not a valid IPv4 network (e.g. 192.168.1.0/24)") from exc
     if net.version != 4:
         raise ModelError(f"{what}: only IPv4 is supported")
     return net
@@ -433,8 +473,8 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
         if d.get("internal") not in INTERNAL:
             raise ModelError(f"Domain {d['id']}: internal must be full or none")
         homes += bool(d.get("home"))
-        if d.get("home") and d.get("kind") == "client":
-            raise ModelError("The home network (subnet router of this app) cannot belong to a client domain")
+        if d.get("home") and d.get("kind") == "project":
+            raise ModelError("The home network (subnet router of this app) cannot belong to a project domain")
         for u in d.get("users", []):
             if not USER_RE.match(u):
                 raise ModelError(f"Invalid user name '{u}'")
@@ -443,7 +483,7 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
             owners[u] = d["id"]
     if homes > 1:
         raise ModelError("Only one domain can contain the home network")
-    # A domain ID that is a prefix of another (srs / srs-x) would make tag ownership ambiguous.
+    # A domain ID that is a prefix of another (proj / proj-x) would make tag ownership ambiguous.
     for a in ids:
         for b in ids:
             if a != b and b.startswith(a + "-"):
@@ -460,8 +500,8 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
             raise ModelError(f"Location ID '{loc['id']}': lowercase letters, digits and '-', max 20 characters")
         if dom is None:
             raise ModelError(f"Location {loc['id']}: unknown domain {loc['domain']}")
-        if dom["kind"] != "client":
-            raise ModelError(f"Location {loc['id']}: locations belong to client domains")
+        if dom["kind"] != "project":
+            raise ModelError(f"Location {loc['id']}: locations belong to project domains")
         local = _net(loc["local_subnet"], f"Location {loc['name']}: local subnet")
         vpn = _net(loc["vpn_subnet"], f"Location {loc['name']}: VPN subnet")
         if local.prefixlen != vpn.prefixlen:
@@ -554,19 +594,33 @@ def check_connection(model: dict, c: dict, nodes_by_id: dict[int, dict], warning
         if node is not None and node_location(model, node):
             raise ModelError(f"Connection {name}: an Edgebox can never be a source")
     normalize_ports(model, c.get("ports"))
+    for ref in expand_refs(model, dsts):
+        kind, _, key = ref.partition(":")
+        node = nodes_by_id.get(int(key)) if kind == "node" and key.isdigit() else None
+        if node is None:
+            continue
+        role = node_role(model, node)
+        label = node.get("given_name") or node.get("name")
+        if role == "mobile":
+            warnings.append(f"Connection {name}: {label} is a phone or tablet; those are almost never a destination")
+        elif role == "workstation" and not _workstation_ports_only(model, c.get("ports")):
+            warnings.append(
+                f"Connection {name}: {label} is a workstation; usually only remote desktop, VNC, SSH or file "
+                "sharing goes to a workstation. Is it a server? Mark it as server."
+            )
 
     src_doms = endpoint_domains(model, srcs, nodes_by_id)
     dst_doms = endpoint_domains(model, dsts, nodes_by_id)
     for sd in src_doms:
         d = domain(model, sd)
-        if d and d["kind"] == "client" and dst_doms - {sd}:
+        if d and d["kind"] == "project" and dst_doms - {sd}:
             raise ModelError(
-                f"Connection {name}: {d['name']} is a client domain; it can never start connections to another domain"
+                f"Connection {name}: {d['name']} is a project domain; it can never start connections to another domain"
             )
     for sd in src_doms:
         for dd in dst_doms - {sd}:
             a, b = domain(model, sd), domain(model, dd)
-            if a and b and a["kind"] != "client" and b["kind"] != "client":
+            if a and b and a["kind"] != "project" and b["kind"] != "project":
                 warnings.append(f"Connection {name}: crosses {a['name']} → {b['name']} (allowed, but on purpose?)")
 
 
@@ -641,6 +695,19 @@ def apply_change(model: dict, kind: str, action: str, data: dict) -> tuple[dict,
     m = copy.deepcopy(model)
     m.setdefault("groups", [])
     m.setdefault("port_profiles", [])
+    if kind == "noderole":
+        node_id, role = str(data.get("id")), str(data.get("role") or "")
+        if not node_id.isdigit():
+            raise ModelError("Unknown device")
+        roles = m.setdefault("node_roles", {})
+        if role in ROLES:
+            roles[node_id] = role
+        elif role in ("", "auto"):
+            roles.pop(node_id, None)
+        else:
+            raise ModelError(f"Unknown device type {role}")
+        _bump(m)
+        return m, f"device {node_id} type {role or 'auto'}"
     coll = COLLECTIONS.get(kind)
     if coll is None:
         raise ModelError(f"Unknown object type {kind}")
@@ -740,7 +807,7 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
         obj = {
             "id": _text(data, "id").lower(),
             "name": _text(data, "name") or _text(data, "id"),
-            "kind": _text(data, "kind", "client"),
+            "kind": LEGACY_KINDS.get(_text(data, "kind", "project"), _text(data, "kind", "project")),
             "users": sorted({str(u).strip().lower() for u in users}),
             "internal": _text(data, "internal", "none"),
             "home": bool(data.get("home", False)),
@@ -751,7 +818,7 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
         return obj
     if kind == "location":
         number = int(data.get("number") or 0)
-        local = _text(data, "local_subnet", "172.168.1.0/24")
+        local = _text(data, "local_subnet", "192.168.1.0/24")
         vpn = _text(data, "vpn_subnet") or suggest_vpn_subnet(m, number, local)
         loc_id = _text(data, "id").lower() or (f"loc{number:02d}" if number else "")
         if not creating:
