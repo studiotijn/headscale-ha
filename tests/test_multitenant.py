@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -203,7 +204,7 @@ def test_edge_nftables():
     assert "ip saddr 100.64.0.1 ip daddr 192.168.1.10 tcp dport { 80, 8010 } accept" in text
     assert "ip saddr 100.64.0.4 ip daddr 192.168.1.0/24 tcp dport 80 accept" in text
     assert "cam2" not in text and "10.81.2" not in text
-    if shutil.which("nft"):
+    if shutil.which("nft") and os.geteuid() == 0:  # nft -c needs root (CI checks it in edge_dataplane.sh)
         res = subprocess.run(["nft", "-c", "-f", "-"], input=text, text=True, capture_output=True)
         assert res.returncode == 0, res.stderr
 
@@ -293,7 +294,7 @@ def test_groups_users_and_profiles():
     m3, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "g2g"), "dst": ["dev:cam2", "loc:loc02"]})
     nft3 = pg.edge_nftables(m3, "loc02", ctx())
     assert "ip daddr 192.168.1.0/24 tcp dport" in nft3 and "192.168.1.10," not in nft3  # host absorbed by subnet
-    if shutil.which("nft"):
+    if shutil.which("nft") and os.geteuid() == 0:  # nft -c needs root (CI checks it in edge_dataplane.sh)
         for text in (nft2, nft3):
             res = subprocess.run(["nft", "-c", "-f", "-"], input=text, text=True, capture_output=True)
             assert res.returncode == 0, res.stderr
