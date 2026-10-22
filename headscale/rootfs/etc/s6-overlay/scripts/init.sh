@@ -6,7 +6,7 @@
 mkdir -p /run/hsha /run/headscale /run/tailscale
 
 # A new installation from another repository URL takes over the data of the previous one.
-python3 -m hsha.migrate || true
+python3 -m hsha.migrate || bashio::exit.nok "Could not take over the previous Headscale installation (see above)."
 
 # Never fails on a bad configuration: Headscale then waits and the setup
 # wizard in the sidebar panel explains what to fix.

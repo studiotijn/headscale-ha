@@ -91,8 +91,7 @@ def migrate() -> bool:
         return False
     slug = prev["slug"]
     if prev.get("state") == "started":
-        log.warning("Previous installation %s is still running: stop it, then restart this app", slug)
-        return False
+        raise RuntimeError(f"previous installation {slug} is still running: stop it, then start this app again")
     log.info("Taking over the data of the previous installation %s", slug)
     backup = supervisor._post(
         "/backups/new/partial",
@@ -144,7 +143,10 @@ def main() -> int:
     try:
         migrate()
     except Exception as exc:
-        log.error("Migration from the previous installation failed: %s", exc)
+        # Don't start with an empty database next to the old one: that would make every
+        # device sign in again. Stop here; the next start tries again.
+        log.error("Taking over the previous installation failed: %s", exc)
+        return 1
     return 0
 
 
