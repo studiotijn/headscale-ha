@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.2
+
+- **Take over a previous installation.** Installed the app again from the repository under
+  another URL (e.g. without an access token)? On its first start it copies the data and options
+  of the other Headscale app (through a temporary backup), so devices keep working. Stop the old
+  app first, then uninstall it afterwards.
+
 ## 0.12.1
 
 - **Fix: *Update* in the panel did nothing.** The Supervisor doesn't let an app update itself, so

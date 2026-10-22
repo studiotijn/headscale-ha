@@ -457,3 +457,30 @@ def test_db_move_node(tmp_path):
         hs.db_move_node(str(db), 9, "dynteq")
     con = sqlite3.connect(db)
     assert con.execute("SELECT user_id FROM nodes WHERE id = 1").fetchone()[0] == 2
+
+
+def test_migrate_extract(tmp_path):
+    import io
+    import tarfile
+
+    from hsha.migrate import _extract
+
+    def add(tar, name, data):
+        info = tarfile.TarInfo(name)
+        info.size = len(data)
+        info.mode = 0o600
+        tar.addfile(info, io.BytesIO(data))
+
+    inner = io.BytesIO()
+    with tarfile.open(fileobj=inner, mode="w:gz") as tar:
+        add(tar, "./addon.json", json.dumps({"user": {"options": {"server_url": "https://hs.x"}}}).encode())
+        add(tar, "./data/headscale/db.sqlite", b"db")
+        add(tar, "./data/../evil", b"x")
+    outer = io.BytesIO()
+    with tarfile.open(fileobj=outer, mode="w") as tar:
+        add(tar, "./backup.json", b"{}")
+        add(tar, "./0262c6c5_headscale.tar.gz", inner.getvalue())
+    meta = _extract(outer.getvalue(), "0262c6c5_headscale", tmp_path)
+    assert meta["user"]["options"]["server_url"] == "https://hs.x"
+    assert (tmp_path / "headscale/db.sqlite").read_bytes() == b"db"
+    assert not (tmp_path.parent / "evil").exists()
