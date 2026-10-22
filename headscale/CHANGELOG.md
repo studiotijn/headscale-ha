@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Printers elsewhere (e.g. at work): add manually with *Reachable via* a Tailscale device at that location. The app approves that /32 route on the device, withdraws it on removal, shows the route status and the command to run. Included in DNS names, AirPrint DNS-SD and the iPhone profile.
+
 ## 0.5.4
 
 - iPhone profile opens in a new tab and is served inline, so iOS offers to install it; clearer install steps.

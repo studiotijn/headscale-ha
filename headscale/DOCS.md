@@ -108,8 +108,25 @@ mDNS/AirPrint discovery does not cross a VPN tunnel, so the panel discovers prin
 3. *Test* checks that it responds over IPP, and *How to connect* shows the address for each
    platform.
 
-**iPhone/iPad:** AirPrint only finds printers through local discovery, so it does not work over
-Tailscale. Use the manufacturer's app or an IPP printing app with the address shown.
+**iPhone/iPad:** iOS normally finds AirPrint printers only on the local network. Install the
+profile from *Printers → Download iPhone/iPad profile* (open the page in Safari): it adds every
+IPP printer by IP address, so it shows up in the print menu over Tailscale too. Settings →
+General → VPN & Device Management → install.
+
+### A printer somewhere else (e.g. at work)
+
+A PC at that location that runs Tailscale (logged in to this Headscale) can pass on the
+printer's address:
+
+1. On that PC: `tailscale set --advertise-routes=<printer-ip>/32` (list any routes it already
+   advertises too; on Windows enable *Run unattended*). Ask your IT department first.
+2. *Printers → Add manually*, choose that PC under *Reachable via*. The app approves exactly
+   that /32 route on the PC and withdraws it again when you remove the printer.
+3. Download the iPhone profile again, so it includes the new printer.
+
+The printer's address must lie outside the home network. The app's own router does not use other
+devices' routes, so *Test* checks the path (PC online, route advertised and approved); test the
+printer itself from your phone.
 
 ### AirPrint via VPN (experimental)
 

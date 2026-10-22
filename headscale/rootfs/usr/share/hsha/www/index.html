@@ -143,6 +143,8 @@
               <select name="protocol"><option value="ipp">IPP</option><option value="ipps">IPPS</option><option value="raw">RAW (9100)</option><option value="lpd">LPD</option></select></label>
             <label><span>Port</span><input name="port" type="number" min="1" max="65535" placeholder="631"></label>
             <label><span data-i18n="resource">Resource</span><input name="resource" placeholder="ipp/print"></label>
+            <label><span data-i18n="via_label">Reachable via</span>
+              <select name="via_node" id="via-select"><option value="" data-i18n="via_home">Home network</option></select></label>
             <button class="btn" type="submit" data-i18n="add">Add</button>
           </form>
         </details>

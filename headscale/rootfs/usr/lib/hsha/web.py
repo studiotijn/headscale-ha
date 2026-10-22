@@ -7,6 +7,7 @@ Supervisor's ingress proxy (172.30.32.2). Home Assistant authenticates the user.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
 import re
@@ -261,7 +262,35 @@ class App:
         )
 
     # -------------------------------------------------------------- printers
-    def _printer_view(self, p: dict) -> dict:
+    @staticmethod
+    def _via_view(p: dict, nodes: dict[int, dict]) -> dict | None:
+        if not p.get("via_node"):
+            return None
+        n = nodes.get(int(p["via_node"]))
+        route = f"{p['ip']}/32"
+        addr = ipaddress.ip_address(p["ip"])
+
+        def covers(routes):
+            return any(addr in ipaddress.ip_network(r, strict=False) for r in routes or [] if "/" in r)
+
+        if n is None:
+            return {"id": p["via_node"], "missing": True, "route": route}
+        return {
+            "id": int(n["id"]),
+            "name": n.get("given_name") or n.get("name"),
+            "online": bool(n.get("online")),
+            "advertised": covers(n.get("available_routes")),
+            "approved": covers(n.get("approved_routes")),
+            "route": route,
+        }
+
+    async def _nodes_by_id(self) -> dict[int, dict]:
+        try:
+            return {int(n["id"]): n for n in await hs.nodes()}
+        except Exception:
+            return {}
+
+    def _printer_view(self, p: dict, nodes: dict[int, dict] | None = None) -> dict:
         fqdn = self.manager.printer_fqdn(p)
         res = p.get("resource") or "ipp/print"
         urls = {}
@@ -273,7 +302,7 @@ class App:
             urls["socket"] = f"socket://{fqdn}:{p['port']}"
         elif p["protocol"] == "lpd":
             urls["lpd"] = f"lpd://{fqdn}/queue"
-        return {**p, "fqdn": fqdn, "urls": urls}
+        return {**p, "fqdn": fqdn, "urls": urls, "via": self._via_view(p, nodes or {})}
 
     async def printers_mobileconfig(self, _request: web.Request) -> web.Response:
         """iOS/iPadOS configuration profile with an AirPrint payload.
@@ -293,10 +322,18 @@ class App:
         )
 
     async def printers_list(self, _request: web.Request) -> web.Response:
+        nodes = await self._nodes_by_id()
+        router_ips = set(self.manager.router.get("ips") or [])
         return web.json_response(
             {
-                "printers": [self._printer_view(p) for p in self.manager.state["printers"]],
+                "printers": [self._printer_view(p, nodes) for p in self.manager.state["printers"]],
                 "networks": [str(n) for n in self.manager.lan_networks()],
+                # Devices a printer elsewhere can be reached through (not the app's own router).
+                "via_nodes": [
+                    {"id": i, "name": n.get("given_name") or n.get("name"), "online": bool(n.get("online"))}
+                    for i, n in sorted(nodes.items())
+                    if not router_ips.intersection(n.get("ip_addresses") or [])
+                ],
             }
         )
 
@@ -311,7 +348,7 @@ class App:
 
     async def printers_add(self, request: web.Request) -> web.Response:
         printer = await self.manager.add_printer(await request.json())
-        return web.json_response(self._printer_view(printer))
+        return web.json_response(self._printer_view(printer, await self._nodes_by_id()))
 
     async def printers_delete(self, request: web.Request) -> web.Response:
         if not await self.manager.remove_printer(request.match_info["id"]):
@@ -322,6 +359,18 @@ class App:
         p = next((x for x in self.manager.state["printers"] if x["id"] == request.match_info["id"]), None)
         if p is None:
             raise web.HTTPNotFound()
+        if p.get("via_node"):
+            # The app's own router does not use other nodes' routes, so check the path instead.
+            via = self._via_view(p, await self._nodes_by_id()) or {}
+            if via.get("missing"):
+                return web.json_response({"ok": False, "error": "via_missing", "via": via})
+            if not via.get("online"):
+                return web.json_response({"ok": False, "error": "via_offline", "via": via})
+            if not via.get("advertised"):
+                return web.json_response({"ok": False, "error": "via_not_advertised", "via": via})
+            if not via.get("approved"):
+                return web.json_response({"ok": False, "error": "via_not_approved", "via": via})
+            return web.json_response({"ok": True, "state": "via_ready", "via": via})
         if p["protocol"] in ("ipp", "ipps"):
             try:
                 info = await ipp.get_printer_attributes(

@@ -303,3 +303,44 @@ def test_airprint_profile():
     assert ap["PayloadType"] == "com.apple.airprint"
     entry = {"IPAddress": "192.168.6.91", "ResourcePath": "/ipp/print", "Port": 631, "ForceTLS": False}
     assert ap["AirPrint"] == [entry]
+
+
+def test_remote_printer_routes(tmp_path, monkeypatch):
+    import asyncio
+
+    from hsha import hs, manager, paths
+
+    monkeypatch.setattr(paths, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(manager.supervisor, "lan_interfaces", lambda: [])
+    monkeypatch.setattr(manager, "load_state", lambda: {"printers": [], "services": []})
+    m = manager.Manager(opts(advertise_routes=["192.168.6.0/24"]))
+    m.state = {"printers": [], "services": []}
+    monkeypatch.setattr(m, "write_dns_records", lambda: None)
+    monkeypatch.setattr(manager, "save_state", lambda _s: None)
+
+    with pytest.raises(ValueError):
+        m.check_via_node("192.168.6.50", 7)
+    assert m.check_via_node("10.20.30.40", "7") == 7
+    assert m.check_via_node("10.20.30.40", "") is None
+
+    node = {"id": 7, "given_name": "werk-pc", "approved_routes": ["10.1.0.0/16"]}
+    calls = []
+
+    async def fake_nodes():
+        return [node]
+
+    async def fake_approve(node_id, routes):
+        calls.append((node_id, routes))
+        node["approved_routes"] = routes
+
+    monkeypatch.setattr(hs, "nodes", fake_nodes)
+    monkeypatch.setattr(hs, "approve_routes", fake_approve)
+
+    asyncio.run(m.add_printer({"name": "Werk", "ip": "10.20.30.40", "via_node": "7"}))
+    assert m.printer_routes() == []  # not routed through the home router
+    asyncio.run(m.reconcile_remote_routes())
+    assert calls[-1] == (7, ["10.1.0.0/16", "10.20.30.40/32"])
+    m.state["printers"] = []
+    asyncio.run(m.reconcile_remote_routes())
+    assert calls[-1] == (7, ["10.1.0.0/16"])  # the user's own route stays
+    assert m.state["remote_routes"] == {}

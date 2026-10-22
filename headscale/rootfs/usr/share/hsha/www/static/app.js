@@ -36,6 +36,12 @@ const STRINGS = {
     state: "Status", tailnet_ip: "Tailnet-IP", lan_routes: "LAN-routes", approved: "Goedgekeurd", exit_node: "Exit-node",
     yes: "ja", no: "nee", disabled: "uitgeschakeld", embedded: "ingebouwd", plus_tailscale: "+ Tailscale-relays als reserve",
     printer_ok: "Bereikbaar", printer_fail: "Niet bereikbaar",
+    via_label: "Bereikbaar via", via_home: "Thuisnetwerk",
+    via_hint: "Printer ergens anders, bijvoorbeeld op je werk? Kies het apparaat daar waarop Tailscale draait. Dat apparaat moet het adres van de printer doorgeven: tailscale set --advertise-routes=<printer-ip>/32 (zet routes die het al doorgeeft erbij). De app keurt de route zelf goed.",
+    via_status: "Via {name}: {state}", via_ok: "route actief", via_missing: "apparaat bestaat niet meer in Headscale",
+    via_offline: "apparaat is offline", via_not_advertised: "geeft {route} nog niet door. Voer op dat apparaat uit:",
+    via_not_approved: "route wordt goedgekeurd (binnen 30 s)", via_ready: "route actief; test nu op je telefoon",
+    via_test_phone: "Test met Tailscale aan op je telefoon:",
     howto_win: "Windows: Instellingen → Printers → Printer toevoegen → ‘De printer die ik wil gebruiken staat niet in de lijst’ → ‘Een gedeelde printer selecteren op naam’ en vul in:",
     howto_mac: "macOS: Systeeminstellingen → Printers → + → IP-tabblad, protocol IPP, adres:",
     howto_linux: "Linux (CUPS): lpadmin -p printer -E -m everywhere -v",
@@ -62,6 +68,12 @@ const STRINGS = {
     state: "State", tailnet_ip: "Tailnet IP", lan_routes: "LAN routes", approved: "Approved", exit_node: "Exit node",
     yes: "yes", no: "no", disabled: "disabled", embedded: "embedded", plus_tailscale: "+ Tailscale relays as fallback",
     printer_ok: "Reachable", printer_fail: "Unreachable",
+    via_label: "Reachable via", via_home: "Home network",
+    via_hint: "Printer somewhere else, for example at work? Choose the device there that runs Tailscale. That device must pass on the printer's address: tailscale set --advertise-routes=<printer-ip>/32 (include any routes it already advertises). The app approves the route itself.",
+    via_status: "Via {name}: {state}", via_ok: "route active", via_missing: "device no longer exists in Headscale",
+    via_offline: "device is offline", via_not_advertised: "doesn't advertise {route} yet. Run on that device:",
+    via_not_approved: "route is being approved (within 30 s)", via_ready: "route active; now test on your phone",
+    via_test_phone: "Test with Tailscale on, on your phone:",
     howto_win: "Windows: Settings → Printers → Add device → “The printer that I want isn't listed” → “Select a shared printer by name” and enter:",
     howto_mac: "macOS: System Settings → Printers → + → IP tab, protocol IPP, address:",
     howto_linux: "Linux (CUPS): lpadmin -p printer -E -m everywhere -v",
@@ -320,6 +332,11 @@ async function loadPrinters() {
   $("#scan-nets").textContent = data.networks.join(", ") || "–";
   const box = $("#printers");
   $("#ios-profile").hidden = !data.printers.some((p) => p.protocol === "ipp" || p.protocol === "ipps");
+  const sel = $("#via-select");
+  const keep = sel.value;
+  sel.replaceChildren(el("option", { value: "" }, t("via_home")),
+    ...(data.via_nodes || []).map((n) => el("option", { value: String(n.id) }, `${n.name}${n.online ? "" : " (offline)"}`)));
+  sel.value = keep;
   if (!data.printers.length) {
     box.replaceChildren(el("p", { class: "muted" }, t("none_yet")));
     return;
@@ -331,14 +348,24 @@ async function loadPrinters() {
     $(".p-name", node).textContent = p.name;
     $(".p-meta", node).textContent = ` ${p.fqdn} → ${p.ip}:${p.port} · ${p.protocol.toUpperCase()}${p.model ? ` · ${p.model}` : ""}`;
     $(".howto", node).replaceChildren(...howto(p));
+    if (p.via) {
+      const v = p.via;
+      const state = v.missing ? "via_missing" : !v.online ? "via_offline" : !v.advertised ? "via_not_advertised" : !v.approved ? "via_not_approved" : "via_ok";
+      const box = el("div", { class: `note ${state === "via_ok" ? "ok" : "warn"}` },
+        el("p", {}, fmt("via_status", { name: v.name || `#${v.id}`, state: fmt(state, { route: v.route }) })));
+      if (state === "via_not_advertised") box.append(copyable(`tailscale set --advertise-routes=${v.route}`));
+      if (p.urls.windows) box.append(el("p", { class: "small" }, t("via_test_phone")), copyable(`http://${p.ip}:${p.port}`));
+      $(".p-result", node).before(box);
+    }
     $(".p-test", node).addEventListener("click", async (e) => {
       busy(e.target, true);
       const out = $(".p-result", node);
       try {
         const r = await api(`printers/${p.id}/test`, { method: "POST" });
+        const msg = (x) => (x && x.startsWith("via_") ? fmt(x, { route: r.via?.route || "" }) : x);
         out.textContent = r.ok
-          ? `✓ ${t("printer_ok")}: ${[r.model, r.state, r.message].filter(Boolean).join(" · ")}`
-          : `✗ ${t("printer_fail")}: ${r.error}`;
+          ? `✓ ${t("printer_ok")}: ${[r.model, msg(r.state), r.message].filter(Boolean).join(" · ")}`
+          : `✗ ${t("printer_fail")}: ${msg(r.error)}`;
         out.className = `p-result ${r.ok ? "ok-text" : "warn-text"}`;
       } catch (err) { out.textContent = err.message; } finally { busy(e.target, false); }
     });
@@ -378,6 +405,7 @@ $("#manual-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target).entries());
   if (!f.port) delete f.port;
+  if (!f.via_node) delete f.via_node;
   await addPrinter(f);
   e.target.reset();
 });

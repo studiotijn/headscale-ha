@@ -54,6 +54,8 @@ class Manager:
         nets = [ipaddress.ip_network(r, strict=False) for r in self.lan_routes()]
         out = []
         for p in self.state["printers"] + self.state.get("services", []):
+            if p.get("via_node"):
+                continue  # reached through another subnet router (e.g. a PC at work)
             ip = ipaddress.ip_address(p["ip"])
             if not any(ip in n for n in nets):
                 out.append(f"{ip}/32")
@@ -220,8 +222,47 @@ class Manager:
     def printer_fqdn(self, printer: dict) -> str:
         return f"{printer['slug']}.{self.opts.base_domain}"
 
+    def check_via_node(self, ip: str, via_node) -> int | None:
+        """A printer elsewhere (work) is reached through the node that advertises it."""
+        if via_node in (None, "", 0, "0", "home"):
+            return None
+        addr = ipaddress.ip_address(ip)
+        if any(addr in ipaddress.ip_network(r, strict=False) for r in self.lan_routes()):
+            raise ValueError(
+                f"{ip} is part of your home network ({', '.join(self.lan_routes())}); "
+                "a printer elsewhere needs an address outside it"
+            )
+        return int(via_node)
+
+    async def reconcile_remote_routes(self) -> None:
+        """Approve <ip>/32 on the nodes that printers are reached through; withdraw what we approved before."""
+        wanted: dict[str, set[str]] = {}
+        for p in self.state["printers"]:
+            if p.get("via_node"):
+                wanted.setdefault(str(p["via_node"]), set()).add(f"{p['ip']}/32")
+        managed: dict[str, list[str]] = self.state.get("remote_routes", {})
+        if not wanted and not managed:
+            return
+        nodes = {str(n["id"]): n for n in await hs.nodes()}
+        new_managed: dict[str, list[str]] = {}
+        for node_id in set(wanted) | set(managed):
+            node = nodes.get(node_id)
+            if node is None:
+                continue
+            approved = set(node.get("approved_routes") or [])
+            target = (approved - set(managed.get(node_id, []))) | wanted.get(node_id, set())
+            if target != approved:
+                log.info("Routes for %s: %s", node.get("given_name") or node_id, ", ".join(sorted(target)) or "(none)")
+                await hs.approve_routes(int(node_id), sorted(target))
+            if wanted.get(node_id):
+                new_managed[node_id] = sorted(wanted[node_id])
+        if new_managed != managed:
+            self.state["remote_routes"] = new_managed
+            save_state(self.state)
+
     async def add_printer(self, data: dict) -> dict:
         ip = str(ipaddress.IPv4Address(str(data["ip"]).strip()))
+        via_node = self.check_via_node(ip, data.get("via_node"))
         protocol = data.get("protocol") if data.get("protocol") in ("ipp", "ipps", "raw", "lpd") else "ipp"
         default_port = {"ipp": 631, "ipps": 631, "raw": 9100, "lpd": 515}[protocol]
         name = (str(data.get("name") or "").strip() or f"Printer {ip}")[:64]
@@ -244,6 +285,7 @@ class Manager:
                 "protocol": protocol,
                 "resource": str(data.get("resource") or default_resource).lstrip("/"),
                 "model": data.get("model"),
+                "via_node": via_node,
                 # mDNS TXT record of the printer, replayed for AirPrint via DNS-SD.
                 "txt": {str(k)[:32]: str(v)[:200] for k, v in (data.get("txt") or {}).items()}
                 if isinstance(data.get("txt"), dict)
@@ -343,6 +385,7 @@ class Manager:
             try:
                 await self.watch_certificate()
                 await self.reconcile_router()
+                await self.reconcile_remote_routes()
                 self.error = None
             except Exception as exc:
                 self.error = str(exc)
