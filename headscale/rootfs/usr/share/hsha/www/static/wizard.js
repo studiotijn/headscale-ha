@@ -306,6 +306,11 @@ Object.assign(STRINGS.nl, {
   ap_test: "Keten testen", ap_test_ok: "Werkt: {domain} wordt beantwoord via poort 53 ✓", ap_test_printers: "Printers gevonden: {list}",
   ap_test_fail: "Geen antwoord voor {domain} via poort 53. Staat de AdGuard-regel erin en is ‘Instellingen opslaan’ geklikt?",
   ap_test_normal: "Gewone DNS via poort 53: {res}",
+  ap_pushed: "Headscale stuurt naar je apparaten: zoekdomeinen {search}; {domain} → {split}.",
+  ap_pushed_missing: "Headscale stuurt het printerdomein nog niet naar je apparaten (het tailnet-adres van de router is nog onbekend). Herstart de app.",
+  ap_queries: "Laatste DNS-vragen voor {domain} (van je apparaten via het VPN):",
+  ap_no_queries: "Nog geen enkele vraag van een apparaat binnengekomen. Zet op je iPhone Tailscale uit en weer aan, open dan het printmenu. Komt er dan nog niets binnen, dan bereiken de vragen deze app niet.",
+  ap_browse_seen: "Je apparaat vraagt naar printers in dit domein ✓",
   ap_ios: "Op je iPhone: Tailscale aan, MagicDNS aan (standaard). Open Delen → Print in een app; de printer verschijnt na enkele seconden.",
 });
 Object.assign(STRINGS.en, {
@@ -321,6 +326,11 @@ Object.assign(STRINGS.en, {
   ap_test: "Test the chain", ap_test_ok: "Works: {domain} is answered through port 53 ✓", ap_test_printers: "Printers found: {list}",
   ap_test_fail: "No answer for {domain} through port 53. Is the AdGuard line in place and did you click ‘Save’?",
   ap_test_normal: "Normal DNS through port 53: {res}",
+  ap_pushed: "Headscale sends your devices: search domains {search}; {domain} → {split}.",
+  ap_pushed_missing: "Headscale doesn't send the printer domain to your devices yet (the router's tailnet address is unknown). Restart the app.",
+  ap_queries: "Latest DNS queries for {domain} (from your devices through the VPN):",
+  ap_no_queries: "No query from any device has arrived yet. Turn Tailscale off and on again on your iPhone, then open the print menu. If still nothing arrives, the queries don't reach this app.",
+  ap_browse_seen: "Your device asks for printers in this domain ✓",
   ap_ios: "On your iPhone: Tailscale on, MagicDNS on (default). Open Share → Print in an app; the printer appears after a few seconds.",
 });
 
@@ -923,6 +933,21 @@ BODIES.airprint = (s) => {
       names.length ? el("p", {}, fmt("ap_test_printers", { list: names.join(", ") })) : "",
       el("p", { class: "muted small" }, fmt("ap_test_normal", { res: r.normal_dns?.ok ? "✓" : (r.normal_dns?.error || r.normal_dns?.rcode || "✕") }))));
     if (r.ok) out.push(note("info", t("ap_ios")));
+  }
+  const pushed = d.pushed || {};
+  const split = (pushed.split || {})[d.domain];
+  out.push(split
+    ? el("p", { class: "muted small" }, fmt("ap_pushed", { search: (pushed.search_domains || []).join(", ") || "–", domain: d.domain, split: split.join(", ") }))
+    : note("warn", t("ap_pushed_missing")));
+  const q = d.recent_queries || [];
+  const fromDevices = q.filter((x) => !(r && Math.abs(x.t - r.time) < 5));
+  if (!fromDevices.length) {
+    out.push(note("info", t("ap_no_queries")));
+  } else {
+    if (fromDevices.some((x) => x.name.includes("_ipp") || x.name.includes("_dns-sd"))) out.push(note("ok", t("ap_browse_seen")));
+    out.push(el("details", {}, el("summary", {}, fmt("ap_queries", { domain: d.domain })),
+      el("ul", { class: "plain mono" }, ...fromDevices.slice(-15).reverse().map((x) =>
+        el("li", {}, `${new Date(x.t * 1000).toLocaleTimeString(LANG)}  ${x.type}  ${x.name}  → ${x.rcode}${x.answers ? ` (${x.answers})` : ""}`)))));
   }
   return out;
 };

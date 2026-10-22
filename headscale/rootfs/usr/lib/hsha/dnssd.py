@@ -142,12 +142,37 @@ def system_resolver() -> str:
     return "1.1.1.1"
 
 
+QUERY_LOG = paths.RUN / "dns-queries.json"
+
+
 class Server:
     def __init__(self, domain: str, forward_to: str | None):
         self.domain = domain
         self.forward_to = forward_to
         self.zone = Zone(domain)
         self._mtime = None
+        self.recent: list[dict] = []
+        self._last_flush = 0.0
+
+    def remember(self, request: DNSRecord, rcode: int, answers: int) -> None:
+        """Keep the last queries for the setup wizard (shows whether devices really ask)."""
+        import time
+
+        self.recent.append(
+            {
+                "t": int(time.time()),
+                "name": str(request.q.qname).rstrip("."),
+                "type": QTYPE.get(request.q.qtype),
+                "rcode": RCODE.get(rcode),
+                "answers": answers,
+            }
+        )
+        self.recent = self.recent[-100:]
+        now = time.monotonic()
+        if now - self._last_flush > 1:
+            self._last_flush = now
+            with contextlib.suppress(OSError):
+                write_json(QUERY_LOG, self.recent, 0o644)
 
     def refresh(self) -> None:
         try:
@@ -165,7 +190,9 @@ class Server:
             return None
         self.refresh()
         if self.zone.inside(request.q.qname):
-            return self.zone.answer(request).pack()
+            reply = self.zone.answer(request)
+            self.remember(request, reply.header.rcode, len(reply.rr))
+            return reply.pack()
         if self.forward_to:
             return await self.forward(data)
         reply = DNSRecord(DNSHeader(id=request.header.id, qr=1, ra=1, rcode=RCODE.REFUSED), q=request.q)

@@ -345,6 +345,8 @@ class Wizard:
                 "router_ip": self.app.manager.state.get("router_ipv4"),
                 "printers": len(ipp_printers),
                 "test": dns_test,
+                "recent_queries": read_json(paths.RUN / "dns-queries.json", [])[-25:],
+                "pushed": self._pushed_dns(),
             },
         }
         out = []
@@ -403,6 +405,24 @@ class Wizard:
         self.wstate["external_test"] = result
         save_state(self.app.manager.state)
         return result
+
+    @staticmethod
+    def _pushed_dns() -> dict:
+        """The DNS settings Headscale sends to devices (from the generated config)."""
+        import yaml
+
+        try:
+            cfg = yaml.safe_load(paths.HS_CONFIG.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            return {}
+        dns = cfg.get("dns") or {}
+        ns = dns.get("nameservers") or {}
+        return {
+            "search_domains": dns.get("search_domains") or [],
+            "split": ns.get("split") or {},
+            "global": ns.get("global") or [],
+            "override_local_dns": dns.get("override_local_dns"),
+        }
 
     async def dns_test(self) -> dict:
         """Query 127.0.0.1:53 like a tailnet device does (the router forwards port 53 there)."""

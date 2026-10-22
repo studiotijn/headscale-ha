@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- AirPrint step: shows which DNS settings Headscale pushes to devices, and the latest DNS
+  queries that reached the printer DNS through the VPN. That shows whether an iPhone asks for
+  printers at all.
+
 ## 0.5.0
 
 - **Home network tab** with three separate assistants. Each one searches, adds the device
