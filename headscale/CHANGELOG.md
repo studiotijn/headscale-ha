@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+- **Move a device to another network.** In a device's access panel (Networks), choose the
+  network and *Move*. A personal device gets the other network's user as owner and keeps its
+  name, IP address and keys; nothing has to be done on the device. Headscale has no command for
+  this, so the app stops Headscale for a few seconds, changes the owner in its database (backup
+  `db.sqlite.before-move`) and starts it again. Servers move by getting the other network's tag.
+- API without networks: `POST /api/nodes/<id>/move {"user": "..."}`.
+
 ## 0.10.0
 
 - **Generic names.** Multi-tenant mode starts with the networks *Private*, *Work* and *Project*

@@ -169,3 +169,97 @@ async def set_policy(policy_text: str) -> None:
         await run("policy", "set", "--file", tmp, json_output=False)
     finally:
         os.unlink(tmp)
+
+
+# ------------------------------------------------------------------ move a device to another user
+# Headscale 0.29 has no CLI/API command to change a node's owner. The node keeps its keys and
+# tailnet IPs; only nodes.user_id changes. Headscale keeps nodes in memory, so it must be stopped
+# while the database is changed and started again afterwards (devices reconnect in seconds).
+HS_SERVICE = os.environ.get("HSHA_HS_SERVICE", "/run/service/headscale")
+S6_SVC = shutil.which("s6-svc") or "/command/s6-svc"
+S6_SVWAIT = shutil.which("s6-svwait") or "/command/s6-svwait"
+
+
+def db_move_node(db_path: str, node_id: int, user_name: str) -> dict:
+    """Change the owner of one (untagged) node in Headscale's SQLite database."""
+    import sqlite3
+
+    con = sqlite3.connect(db_path, timeout=10)
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(nodes)")}
+        if not {"id", "user_id", "tags"} <= cols:
+            raise HeadscaleError("Unexpected Headscale database layout; not changing it")
+        row = con.execute(
+            "SELECT user_id, tags, given_name FROM nodes WHERE id = ? AND deleted_at IS NULL", (node_id,)
+        ).fetchone()
+        if row is None:
+            raise HeadscaleError(f"Device {node_id} not found")
+        old_user, tags, name = row
+        if tags and json.loads(tags or "[]"):
+            raise HeadscaleError(f"{name} is a tagged device; change its tag instead")
+        user = con.execute(
+            "SELECT id FROM users WHERE name = ? AND deleted_at IS NULL ORDER BY id LIMIT 1", (user_name,)
+        ).fetchone()
+        if user is None:
+            raise HeadscaleError(f"User {user_name} does not exist")
+        if user[0] != old_user:
+            with con:
+                con.execute("UPDATE nodes SET user_id = ? WHERE id = ?", (user[0], node_id))
+        return {"node": name, "from_user_id": old_user, "to_user_id": user[0], "changed": user[0] != old_user}
+    finally:
+        con.close()
+
+
+async def _svc(*args: str, timeout: float = 30) -> int:
+    proc = await asyncio.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+    )
+    try:
+        return await asyncio.wait_for(proc.wait(), timeout)
+    except TimeoutError:
+        proc.kill()
+        return -1
+
+
+async def _stop_headscale() -> None:
+    await _svc(S6_SVC, "-d", HS_SERVICE)
+    if await _svc(S6_SVWAIT, "-D", "-t", "20000", HS_SERVICE, timeout=25) != 0:
+        raise HeadscaleError("Headscale did not stop in time; nothing was changed")
+
+
+async def _start_headscale() -> None:
+    await _svc(S6_SVC, "-u", HS_SERVICE)
+
+
+async def move_node(node_id: int, user_name: str, stop=None, start=None) -> dict:
+    """Give a device another owner (user). Restarts Headscale for a few seconds."""
+    node = next((n for n in await nodes() if int(n["id"]) == int(node_id)), None)
+    if node is None:
+        raise HeadscaleError(f"Device {node_id} not found")
+    if node.get("tags"):
+        raise HeadscaleError("Tagged devices (servers, routers) belong to their tag, not to a user")
+    if (node.get("user") or {}).get("name") == user_name:
+        return {"node": node.get("given_name"), "changed": False}
+    await ensure_user(user_name)
+    db = str(paths.HS_DIR / "db.sqlite")
+    stop, start = stop or _stop_headscale, start or _start_headscale
+    await stop()
+    try:
+        backup = f"{db}.before-move"
+        await asyncio.to_thread(_backup, db, backup)
+        result = await asyncio.to_thread(db_move_node, db, int(node_id), user_name)
+    finally:
+        await start()
+    await wait_healthy(90)
+    return result
+
+
+def _backup(db: str, target: str) -> None:
+    import sqlite3
+
+    src, dst = sqlite3.connect(db), sqlite3.connect(target)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()

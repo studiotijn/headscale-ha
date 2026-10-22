@@ -179,6 +179,11 @@ Off by default; with the option off nothing below changes.
   is normally only a destination for remote desktop, VNC, SSH or file sharing (other ports give a
   warning), and phones are not offered as destinations. *Register as a server of this network* tags
   the device (`tag:<network>-server`): it no longer belongs to a person and does not expire.
+- **Move a device to another network.** In the device dialog, pick the *Network* and press *Move*.
+  A personal device gets a user of that network as owner and keeps its name, IP address and keys;
+  nothing needs to be done on the device. Headscale has no command for this, so the app stops
+  Headscale for a few seconds, changes the owner in its database (a copy is kept as
+  `db.sqlite.before-move`) and starts it again. A server moves by getting the other network's tag.
 - **Access per device.** *Devices → Access* opens one dialog per device: its groups (on/off), what it
   may reach, who may reach it, and the addresses behind it.
 - **Routing follows the open ports.** Add an address behind any VPN device (e.g. a printer behind the

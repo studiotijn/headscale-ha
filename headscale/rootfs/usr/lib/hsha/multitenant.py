@@ -270,6 +270,38 @@ class MultiTenant:
         audit.record("server-tag", actor, f"{name} is now a server ({tag})")
         return {"tag": tag}
 
+    async def move_node(self, node_id: int, domain_id: str, user: str | None, actor: str | None) -> dict:
+        """Move a device to another network: a new owner (user) or, for servers, the other server tag."""
+        nodes = {int(n["id"]): n for n in await hs.nodes()}
+        node = nodes.get(int(node_id))
+        if node is None:
+            raise ModelError("Unknown device")
+        if tenancy.node_location(self.model, node) or "tag:homerouter" in tenancy.node_tags(node):
+            raise ModelError("Routers and Edgeboxes stay in their own network")
+        target = tenancy.domain(self.model, domain_id)
+        if target is None:
+            raise ModelError("Unknown network")
+        name = node.get("given_name") or node.get("name")
+        before = tenancy.node_domain(self.model, node)
+        before_name = (tenancy.domain(self.model, before or "") or {}).get("name") or "-"
+        tags = tenancy.node_tags(node)
+        if tags:
+            if not any(tag.endswith("-server") for tag in tags):
+                raise ModelError("This device has a tag of its own; change it in Headplane")
+            tag = tenancy.server_tag(target["id"])
+            if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
+                raise ModelError("Apply the policy first, so the server tag of that network exists")
+            await hs.set_tags(int(node_id), [tag])
+            audit.record("move", actor, f"{name}: {before_name} → {target['name']} ({tag})")
+            return {"node": name, "domain": target["id"], "tag": tag}
+        owner = self.user_for(target["id"], user)
+        try:
+            result = await hs.move_node(int(node_id), owner)
+        except hs.HeadscaleError as exc:
+            raise ModelError(str(exc)) from exc
+        audit.record("move", actor, f"{name}: {before_name} → {target['name']} (user {owner})")
+        return {"node": name, "domain": target["id"], "user": owner, "changed": result.get("changed", True)}
+
     async def server_key(self, domain_id: str, hours: int, reusable: bool, actor: str | None) -> str:
         dom = tenancy.domain(self.model, domain_id)
         if dom is None:

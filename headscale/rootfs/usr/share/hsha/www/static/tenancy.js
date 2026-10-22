@@ -65,6 +65,12 @@ Object.assign(STRINGS.nl, {
   mt_add_behind: "Adres achter dit apparaat toevoegen", mt_used_in: "Open via:",
   mt_role: "Type", role_server: "Server", role_workstation: "Werkplek", role_mobile: "Telefoon/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatisch ({x})",
   mt_role_hint: "Servers zijn de gewone bestemmingen. Een werkplek is meestal alleen bestemming voor Remote Desktop, VNC of bestanden delen; een telefoon nooit.",
+  mt_network: "Netwerk", mt_move: "Verplaatsen",
+  mt_move_hint: "Verplaatst het apparaat naar een ander netwerk: het krijgt die gebruiker als eigenaar en houdt zijn naam en IP-adres. Headscale herstart daarvoor een paar seconden; er hoeft niets op het apparaat te gebeuren.",
+  mt_move_hint_server: "Een server verhuist door de tag van het andere netwerk te krijgen. Naam en IP-adres blijven gelijk.",
+  mt_move_confirm: "{name} naar {net} verplaatsen? Headscale herstart een paar seconden, alle apparaten zijn heel even offline.",
+  mt_move_confirm_server: "{name} naar {net} verplaatsen (andere server-tag)?",
+  mt_moved: "{name} staat nu in {net}. Verbindingen van het oude netwerk gelden niet meer voor dit apparaat.",
   mt_make_server: "Registreren als server van dit netwerk", mt_make_server_hint: "Aanbevolen voor servers: het apparaat krijgt de tag van het netwerk, hangt niet meer aan een persoon en verloopt niet.",
   mt_made_server: "Is nu een server.", mt_for: "Voor", mt_server_of: "🗄 Server in {x} (getagd, verloopt niet)",
   grp_servers: "Servers", grp_behind: "Achter routers", grp_ws: "Werkplekken (RDP/VNC/bestanden)", grp_people_src: "Personen en hun apparaten",
@@ -134,6 +140,12 @@ Object.assign(STRINGS.en, {
   mt_add_behind: "Add an address behind this device", mt_used_in: "Open through:",
   mt_role: "Type", role_server: "Server", role_workstation: "Workstation", role_mobile: "Phone/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatic ({x})",
   mt_role_hint: "Servers are the usual destinations. A workstation is usually only a destination for remote desktop, VNC or file sharing; a phone never.",
+  mt_network: "Network", mt_move: "Move",
+  mt_move_hint: "Moves the device to another network: that user becomes its owner, its name and IP address stay. Headscale restarts for a few seconds; nothing needs to be done on the device.",
+  mt_move_hint_server: "A server moves by getting the other network's tag. Name and IP address stay the same.",
+  mt_move_confirm: "Move {name} to {net}? Headscale restarts for a few seconds, all devices are briefly offline.",
+  mt_move_confirm_server: "Move {name} to {net} (other server tag)?",
+  mt_moved: "{name} is now in {net}. Connections of the old network no longer apply to this device.",
   mt_make_server: "Register as a server of this network", mt_make_server_hint: "Recommended for servers: the device gets the network's tag, is no longer tied to a person and does not expire.",
   mt_made_server: "Is now a server.", mt_for: "For", mt_server_of: "🗄 Server in {x} (tagged, does not expire)",
   grp_servers: "Servers", grp_behind: "Behind routers", grp_ws: "Workstations (RDP/VNC/files)", grp_people_src: "People and their devices",
@@ -658,6 +670,34 @@ async function openNodeAccess(nodeId) {
         n.role === "server" && !tagged && n.domain ? tagBtn : ""),
         el("p", { class: "muted small" }, n.role === "server" && !tagged && n.domain ? t("mt_make_server_hint") : t("mt_role_hint")));
     }
+    // move to another network (new owner, or the other network's server tag)
+    let moveBox = "";
+    if (!["router", "edgebox"].includes(n.role)) {
+      const isServer = n.tags.some((x) => x.endsWith("-server"));
+      const others = n.tags.length && !isServer ? [] : mtData.model.domains.flatMap((d) => (isServer
+        ? [{ value: `${d.id}|`, label: d.name }]
+        : (d.users || []).map((u) => ({ value: `${d.id}|${u}`, label: (d.users.length > 1 ? `${d.name} · ${u}` : d.name) }))));
+      if (others.length) {
+        const current = isServer ? `${n.domain}|` : `${n.domain}|${n.user}`;
+        const opts = others.some((o) => o.value === current) ? others : [{ value: current, label: t("mt_unassigned") }, ...others];
+        const msel = selectEl(opts, current);
+        const mbtn = el("button", { class: "btn secondary small", type: "button" }, t("mt_move"));
+        mbtn.addEventListener("click", async () => {
+          if (msel.value === current) return;
+          const [domain, user] = msel.value.split("|");
+          const target = (mtDomain(domain) || {}).name || domain;
+          if (!confirm(fmt(isServer ? "mt_move_confirm_server" : "mt_move_confirm", { name: n.name, net: target }))) return;
+          busy(mbtn, true);
+          try {
+            await api(`tenancy/nodes/${n.id}/move`, { method: "POST", body: { domain, user: user || null } });
+            banner(fmt("mt_moved", { name: n.name, net: target }), "ok");
+            mtData = await api("tenancy"); refresh(); await render();
+          } catch (err) { banner(err.message); } finally { busy(mbtn, false); }
+        });
+        moveBox = el("div", {}, el("div", { class: "row tight" }, mtField(t("mt_network"), msel), mbtn),
+          el("p", { class: "muted small" }, t(isServer ? "mt_move_hint_server" : "mt_move_hint")));
+      }
+    }
     // groups
     const groups = (mtData.model.groups || []);
     const gbox = el("div", { class: "chips" }, ...(groups.length ? groups.map((g) => {
@@ -686,7 +726,7 @@ async function openNodeAccess(nodeId) {
           editDevice(null, { via: String(n.id), ip: ipOnly, name: "" });
         } }, `+ ${r}`)))) : "",
       el("button", { class: "btn secondary small", type: "button", onclick: () => editDevice(null, { via: String(n.id) }) }, `+ ${t("mt_add_behind")}`));
-    body.replaceChildren(info, roleBox,
+    body.replaceChildren(info, roleBox, moveBox,
       el("h3", {}, t("mt_node_groups")), gbox,
       el("div", { class: "two-col" },
         el("div", {}, el("h3", {}, t("mt_out")), ...rows(acc.outgoing, "dst"),

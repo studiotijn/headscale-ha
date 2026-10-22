@@ -344,3 +344,32 @@ def test_remote_printer_routes(tmp_path, monkeypatch):
     asyncio.run(m.reconcile_remote_routes())
     assert calls[-1] == (7, ["10.1.0.0/16"])  # the user's own route stays
     assert m.state["remote_routes"] == {}
+
+
+def test_db_move_node(tmp_path):
+    import sqlite3
+
+    from hsha import hs
+
+    db = tmp_path / "db.sqlite"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, deleted_at TEXT)")
+    con.execute(
+        "CREATE TABLE nodes (id INTEGER PRIMARY KEY, given_name TEXT, user_id INTEGER, tags TEXT, deleted_at TEXT)"
+    )
+    con.executemany("INSERT INTO users (id, name) VALUES (?, ?)", [(1, "prive"), (2, "dynteq")])
+    con.execute("INSERT INTO nodes VALUES (1, 'pc-tijn', 1, '[]', NULL)")
+    con.execute("INSERT INTO nodes VALUES (2, 'server', NULL, '[\"tag:x-server\"]', NULL)")
+    con.commit()
+    con.close()
+
+    assert hs.db_move_node(str(db), 1, "dynteq")["changed"] is True
+    assert hs.db_move_node(str(db), 1, "dynteq")["changed"] is False
+    with pytest.raises(hs.HeadscaleError):
+        hs.db_move_node(str(db), 2, "dynteq")  # tagged
+    with pytest.raises(hs.HeadscaleError):
+        hs.db_move_node(str(db), 1, "nobody")
+    with pytest.raises(hs.HeadscaleError):
+        hs.db_move_node(str(db), 9, "dynteq")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT user_id FROM nodes WHERE id = 1").fetchone()[0] == 2

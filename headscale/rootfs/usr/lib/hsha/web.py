@@ -128,6 +128,12 @@ class App:
             await hs.expire_node(node_id)
         elif action == "delete":
             await hs.delete_node(node_id)
+        elif action == "move":
+            body = await request.json() if request.can_read_body else {}
+            user = str(body.get("user") or "").strip()
+            if not user:
+                raise ValueError("Choose a user")
+            await hs.move_node(node_id, user)
         elif action == "approve":
             node = next((n for n in await hs.nodes() if int(n["id"]) == node_id), None)
             if node is None:
@@ -577,6 +583,15 @@ class App:
         self.manager.poke()
         return web.json_response(result)
 
+    async def tenancy_move(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        body = await request.json()
+        result = await mt.move_node(
+            int(request.match_info["id"]), str(body.get("domain") or ""), body.get("user") or None, self._actor(request)
+        )
+        self.manager.poke()
+        return web.json_response(result)
+
     async def tenancy_edge_key(self, request: web.Request) -> web.Response:
         mt = self._mt()
         return web.json_response(await mt.edge_key(request.match_info["id"], self._actor(request)))
@@ -632,6 +647,7 @@ class App:
         app.router.add_post("/api/tenancy/validate", self.tenancy_validate)
         app.router.add_get("/api/tenancy/access", self.tenancy_access)
         app.router.add_post("/api/tenancy/nodes/{id:\\d+}/server", self.tenancy_tag_server)
+        app.router.add_post("/api/tenancy/nodes/{id:\\d+}/move", self.tenancy_move)
         app.router.add_post("/api/tenancy/apply", self.tenancy_apply)
         app.router.add_get("/api/tenancy/audit", self.tenancy_audit)
         app.router.add_post("/api/tenancy/locations/{id}/key", self.tenancy_edge_key)
