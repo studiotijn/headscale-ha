@@ -313,7 +313,7 @@ Object.assign(STRINGS.nl, {
   ap_queries: "Laatste DNS-vragen voor {domain} (van je apparaten via het VPN):",
   ap_no_queries: "Nog geen enkele vraag van een apparaat binnengekomen. Zet op je iPhone Tailscale uit en weer aan, open dan het printmenu. Komt er dan nog niets binnen, dan bereiken de vragen deze app niet.",
   ap_browse_seen: "Je apparaat vraagt naar printers in dit domein ✓",
-  ap_ios: "Op je iPhone: Tailscale aan, MagicDNS aan (standaard). Open Delen → Print in een app; de printer verschijnt na enkele seconden.",
+  ap_ios: "Op je iPhone: Tailscale aan, MagicDNS aan (standaard). Open Delen → Print in een app; de printer verschijnt na enkele seconden. Verschijnt hij niet? iOS zoekt via een VPN vaak niet naar printers. Installeer dan het iPhone-profiel (tab Printers): dat werkt altijd.",
 });
 Object.assign(STRINGS.en, {
   s_airprint: "AirPrint via VPN (experimental)",
@@ -335,7 +335,7 @@ Object.assign(STRINGS.en, {
   ap_queries: "Latest DNS queries for {domain} (from your devices through the VPN):",
   ap_no_queries: "No query from any device has arrived yet. Turn Tailscale off and on again on your iPhone, then open the print menu. If still nothing arrives, the queries don't reach this app.",
   ap_browse_seen: "Your device asks for printers in this domain ✓",
-  ap_ios: "On your iPhone: Tailscale on, MagicDNS on (default). Open Share → Print in an app; the printer appears after a few seconds.",
+  ap_ios: "On your iPhone: Tailscale on, MagicDNS on (default). Open Share → Print in an app; the printer appears after a few seconds. Not showing? iOS often doesn't look for printers over a VPN. Install the iPhone profile (Printers tab): that always works.",
 });
 
 const STEP_ICON = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };

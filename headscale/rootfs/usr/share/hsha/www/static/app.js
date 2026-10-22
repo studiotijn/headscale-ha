@@ -40,7 +40,9 @@ const STRINGS = {
     howto_mac: "macOS: Systeeminstellingen → Printers → + → IP-tabblad, protocol IPP, adres:",
     howto_linux: "Linux (CUPS): lpadmin -p printer -E -m everywhere -v",
     howto_android: "Android: Instellingen → Verbonden apparaten → Afdrukken → Standaard afdrukservice → Printer toevoegen → op IP-adres:",
-    howto_ios: "iPhone/iPad: zet in de installatie-assistent ‘AirPrint via VPN’ aan, dan verschijnt de printer in het gewone printmenu. Anders: de app van de fabrikant of een IPP-app met dit adres:",
+    howto_ios: "iPhone/iPad: installeer het iPhone-profiel hieronder (werkt altijd via VPN). Of de app van de fabrikant met dit adres:",
+    ios_profile_intro: "iPhone/iPad: installeer dit profiel één keer, dan staan de printers in elk printmenu, ook via Tailscale. Open deze pagina in Safari op de iPhone, tik op de knop, daarna Instellingen → Profiel gedownload → Installeer.",
+    ios_profile_btn: "Download iPhone/iPad-profiel",
     howto_raw: "RAW/JetDirect-poort, gebruik een normale printerdriver met:",
     howto_note: "Op het apparaat moet Tailscale actief zijn met MagicDNS aan (standaard).",
   },
@@ -64,7 +66,9 @@ const STRINGS = {
     howto_mac: "macOS: System Settings → Printers → + → IP tab, protocol IPP, address:",
     howto_linux: "Linux (CUPS): lpadmin -p printer -E -m everywhere -v",
     howto_android: "Android: Settings → Connected devices → Printing → Default Print Service → Add printer → by IP address:",
-    howto_ios: "iPhone/iPad: enable ‘AirPrint via VPN’ in the setup wizard and the printer shows up in the normal print menu. Otherwise: the manufacturer's app or an IPP app with:",
+    howto_ios: "iPhone/iPad: install the iPhone profile below (always works over the VPN). Or the manufacturer's app with:",
+    ios_profile_intro: "iPhone/iPad: install this profile once and the printers appear in every print menu, over Tailscale too. Open this page in Safari on the iPhone, tap the button, then Settings → Profile downloaded → Install.",
+    ios_profile_btn: "Download iPhone/iPad profile",
     howto_raw: "RAW/JetDirect port, use a regular printer driver with:",
     howto_note: "Tailscale must be connected on the device with MagicDNS enabled (default).",
   },
@@ -315,6 +319,7 @@ async function loadPrinters() {
   const data = await api("printers");
   $("#scan-nets").textContent = data.networks.join(", ") || "–";
   const box = $("#printers");
+  $("#ios-profile").hidden = !data.printers.some((p) => p.protocol === "ipp" || p.protocol === "ipps");
   if (!data.printers.length) {
     box.replaceChildren(el("p", { class: "muted" }, t("none_yet")));
     return;

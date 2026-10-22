@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- iPhone/iPad profile (AirPrint payload) in the Printers tab: adds the printers by IP address, so they show up in the print menu over Tailscale even when iOS doesn't browse wide-area Bonjour over the VPN.
+
 ## 0.5.2
 
 - AirPrint test also resolves each printer's own name (A record) through port 53 and directly, and explains when AdGuard is the one in the way (cache, rate limit).

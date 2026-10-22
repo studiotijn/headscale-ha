@@ -275,6 +275,22 @@ class App:
             urls["lpd"] = f"lpd://{fqdn}/queue"
         return {**p, "fqdn": fqdn, "urls": urls}
 
+    async def printers_mobileconfig(self, _request: web.Request) -> web.Response:
+        """iOS/iPadOS configuration profile with an AirPrint payload.
+
+        iOS only browses for printers with Bonjour on the local network; over a VPN it
+        often never asks for the wide-area DNS-SD records. A profile adds the printers
+        by IP address instead, and the iPhone reaches them through the subnet router.
+        """
+        body = printers.airprint_profile(self.manager.state["printers"], self.opts.base_domain)
+        if body is None:
+            raise web.HTTPNotFound(text="No IPP printers added")
+        return web.Response(
+            body=body,
+            content_type="application/x-apple-aspen-config",
+            headers={"Content-Disposition": 'attachment; filename="headscale-printers.mobileconfig"'},
+        )
+
     async def printers_list(self, _request: web.Request) -> web.Response:
         return web.json_response(
             {
@@ -417,6 +433,7 @@ class App:
         app.router.add_post("/api/services/{id}/test", self.services_test)
         app.router.add_post("/api/services/{id}/share", self.services_share)
         app.router.add_get("/api/printers", self.printers_list)
+        app.router.add_get("/api/printers.mobileconfig", self.printers_mobileconfig)
         app.router.add_post("/api/printers/scan", self.printers_scan)
         app.router.add_post("/api/printers", self.printers_add)
         app.router.add_delete("/api/printers/{id}", self.printers_delete)

@@ -286,3 +286,20 @@ def test_make_service_and_fingerprint():
     assert _prusa_fingerprint({"Server": "PrusaLink"}, "") == "PrusaLink"
     assert _prusa_fingerprint({}, "<title>Buddy3D</title>") == "Buddy3D camera"
     assert _prusa_fingerprint({}, "<title>Router</title>") is None
+
+
+def test_airprint_profile():
+    import plistlib
+
+    from hsha.printers import airprint_profile
+
+    assert airprint_profile([{"name": "R", "ip": "1.2.3.4", "protocol": "raw", "port": 9100}], "t") is None
+    raw = airprint_profile(
+        [{"name": "Brother", "ip": "192.168.6.91", "protocol": "ipp", "port": 631, "resource": "ipp/print"}],
+        "tailnet.home",
+    )
+    prof = plistlib.loads(raw)
+    ap = prof["PayloadContent"][0]
+    assert ap["PayloadType"] == "com.apple.airprint"
+    entry = {"IPAddress": "192.168.6.91", "ResourcePath": "/ipp/print", "Port": 631, "ForceTLS": False}
+    assert ap["AirPrint"] == [entry]

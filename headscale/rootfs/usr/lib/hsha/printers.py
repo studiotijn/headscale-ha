@@ -166,3 +166,46 @@ async def discover(networks: list[ipaddress.IPv4Network], do_sweep: bool) -> lis
             continue
         entries += res
     return merge(entries)
+
+
+# ---------------------------------------------------------------- iOS profile
+def airprint_profile(printers: list[dict], base_domain: str) -> bytes | None:
+    """A .mobileconfig with an AirPrint payload for every IPP printer (by IP address)."""
+    import plistlib
+    import uuid
+
+    ns = uuid.uuid5(uuid.NAMESPACE_DNS, f"headscale-ha.{base_domain}")
+    entries = [
+        {
+            "IPAddress": p["ip"],
+            "ResourcePath": "/" + (p.get("resource") or "ipp/print").lstrip("/"),
+            "Port": int(p.get("port") or 631),
+            "ForceTLS": p["protocol"] == "ipps",
+        }
+        for p in printers
+        if p.get("protocol") in ("ipp", "ipps")
+    ]
+    if not entries:
+        return None
+    ids = ",".join(sorted(f"{e['IPAddress']}:{e['Port']}{e['ResourcePath']}" for e in entries))
+    payload = {
+        "PayloadType": "com.apple.airprint",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "nl.headscale-ha.airprint.printers",
+        "PayloadUUID": str(uuid.uuid5(ns, "airprint:" + ids)).upper(),
+        "PayloadDisplayName": "AirPrint",
+        "AirPrint": entries,
+    }
+    profile = {
+        "PayloadType": "Configuration",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "nl.headscale-ha.printers",
+        "PayloadUUID": str(uuid.uuid5(ns, "profile")).upper(),
+        "PayloadDisplayName": "Printers via Tailscale",
+        "PayloadDescription": "Home printers, reachable through the Headscale subnet router. "
+        + ", ".join(p["name"] for p in printers if p.get("protocol") in ("ipp", "ipps")),
+        "PayloadOrganization": "Headscale HA",
+        "PayloadRemovalDisallowed": False,
+        "PayloadContent": [payload],
+    }
+    return plistlib.dumps(profile)
