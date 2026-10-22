@@ -233,18 +233,23 @@ for (const action of ["update", "rebuild"]) {
       await api("update", { method: "POST", body: { action } });
       $("#overlay-text").textContent = t("upd_running").replace("{action}", t(`upd_${action}`).toLowerCase());
       $("#overlay").hidden = false;
-      waitForRestartGeneric(600000);
+      waitForRestartGeneric(600000, () => busy(e.target, false));
     } catch (err) { banner(err.message); busy(e.target, false); }
   });
 }
 
-function waitForRestartGeneric(maxMs) {
+function waitForRestartGeneric(maxMs, onError) {
   const started = Date.now();
   let sawDown = false;
   const tick = async () => {
     try {
       const res = await fetch("api/status", { cache: "no-store" });
       if (res.ok && sawDown) { location.reload(); return; }
+      if (res.ok) {
+        // Still the old container: did the update fail before it could start?
+        const u = await api("update").catch(() => ({}));
+        if (u.error) { $("#overlay").hidden = true; banner(u.error); if (onError) onError(); return; }
+      }
       if (!res.ok) sawDown = true;
     } catch { sawDown = true; }
     if (Date.now() - started > maxMs) { location.reload(); return; }

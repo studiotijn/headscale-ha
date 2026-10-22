@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import json
 import logging
@@ -153,11 +154,34 @@ def store_reload() -> None:
     _post("/store/reload", timeout=120)
 
 
-def update_self(slug: str) -> None:
-    # The Supervisor replaces this container while handling the call; a lost
-    # connection afterwards is expected.
+def update_entity(slug: str) -> str | None:
+    """The update.* entity Home Assistant Core keeps for this app (matched on its icon URL)."""
     try:
-        _post(f"/store/addons/{slug}/update", {"backup": False}, timeout=600)
+        states = _core_request("GET", "/states")
+    except SupervisorError as exc:
+        log.warning("Home Assistant states unavailable: %s", exc)
+        return None
+    for st in states or []:
+        eid = str(st.get("entity_id", ""))
+        picture = str((st.get("attributes") or {}).get("entity_picture") or "")
+        if eid.startswith("update.") and f"/addons/{slug}/" in picture:
+            return eid
+    return None
+
+
+def update_self(slug: str, entity: str | None = None) -> None:
+    """Update this app.
+
+    The Supervisor refuses an app that updates itself ("can't update itself"), so the
+    update goes through Home Assistant Core (update.install), exactly like the button in
+    Settings. Core replaces this container while handling the call, so a lost connection
+    afterwards is expected.
+    """
+    entity = entity or update_entity(slug)
+    if not entity:
+        raise SupervisorError("No update entity for this app found in Home Assistant; update it via Settings")
+    try:
+        _core_request("POST", "/services/update/install", {"entity_id": entity, "backup": False}, timeout=900)
     except SupervisorError as exc:
         if "connection" not in str(exc).lower() and "remote end" not in str(exc).lower():
             raise
@@ -197,20 +221,33 @@ def core_language() -> str:
         return "en"
 
 
-def _core_service(domain: str, service: str, data: dict) -> None:
+def _core_request(method: str, path: str, payload: dict | None = None, timeout: float = 10):
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
-        return
+        raise SupervisorError("Home Assistant API not available")
     req = urllib.request.Request(
-        f"{SUPERVISOR}/core/api/services/{domain}/{service}",
-        data=json.dumps(data).encode(),
-        method="POST",
+        f"{SUPERVISOR}/core/api{path}",
+        data=None if payload is None else json.dumps(payload).encode(),
+        method=method,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=10):
-            pass
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        with contextlib.suppress(Exception):
+            detail = exc.read().decode()[:300]
+        raise SupervisorError(f"HTTP {exc.code} {detail}".strip()) from exc
     except Exception as exc:
+        raise SupervisorError(str(exc)) from exc
+    return json.loads(body) if body else None
+
+
+def _core_service(domain: str, service: str, data: dict) -> None:
+    try:
+        _core_request("POST", f"/services/{domain}/{service}", data)
+    except SupervisorError as exc:
         log.warning("Home Assistant service %s.%s failed: %s", domain, service, exc)
 
 

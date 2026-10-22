@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1
+
+- **Fix: *Update* in the panel did nothing.** The Supervisor doesn't let an app update itself, so
+  the panel now asks Home Assistant to install the update (the same as the button in Settings).
+- A failed update or rebuild is now shown in the panel instead of only in the log.
+
 ## 0.12.0
 
 - **Certificate renewal is monitored.** Every 15 minutes the app checks that the certificate in

@@ -80,6 +80,7 @@ class App:
         self.manager = Manager(self.opts)
         self.wizard = Wizard(self)
         self.started = int(time.time())
+        self.update_error: str | None = None
 
     # ---------------------------------------------------------------- status
     async def status(self, _request: web.Request) -> web.Response:
@@ -268,6 +269,7 @@ class App:
                 "update_available": bool(info.get("update_available")),
                 "auto_update": info.get("auto_update"),
                 "available": supervisor.available(),
+                "error": self.update_error,
             }
         )
 
@@ -282,14 +284,27 @@ class App:
             await asyncio.to_thread(supervisor.store_reload)
             return await self.update_get(request)
         if action in ("update", "rebuild"):
+            self.update_error = None
             if action == "rebuild":
                 # Pull the newest code from the repository first; rebuild uses that checkout.
                 await asyncio.to_thread(supervisor.store_reload)
-            func = supervisor.update_self if action == "update" else supervisor.rebuild_self
-            # Run after the response: the Supervisor stops this container while it works.
-            asyncio.get_running_loop().call_later(0.5, lambda: asyncio.ensure_future(asyncio.to_thread(func, slug)))
+                args = (supervisor.rebuild_self, slug)
+            else:
+                entity = await asyncio.to_thread(supervisor.update_entity, slug)
+                if not entity:
+                    raise ValueError("Home Assistant has no update entity for this app. Update it via Settings → Apps.")
+                args = (supervisor.update_self, slug, entity)
+            # Run after the response: this container is replaced while it works.
+            asyncio.get_running_loop().call_later(0.5, lambda: asyncio.ensure_future(self._run_update(action, *args)))
             return web.json_response({"started": action})
         raise ValueError(f"Unknown action {action}")
+
+    async def _run_update(self, action: str, func, *args) -> None:
+        try:
+            await asyncio.to_thread(func, *args)
+        except Exception as exc:
+            self.update_error = f"{action}: {exc}"
+            log.error("App %s failed: %s", action, exc)
 
     async def qr(self, request: web.Request) -> web.Response:
         import io
