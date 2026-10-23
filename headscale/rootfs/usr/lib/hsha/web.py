@@ -37,6 +37,15 @@ async def ingress_only(request: web.Request, handler):
 
 
 @web.middleware
+async def no_stale_static(request: web.Request, handler):
+    """Let the browser revalidate static files (ETag) instead of guessing how long to cache them."""
+    response = await handler(request)
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@web.middleware
 async def json_errors(request: web.Request, handler):
     try:
         return await handler(request)
@@ -646,11 +655,14 @@ class App:
         return web.json_response({"entries": audit.recent(100)})
 
     # ------------------------------------------------------------------ app
-    async def index(self, _request: web.Request) -> web.FileResponse:
-        return web.FileResponse(paths.WWW / "index.html", headers={"Cache-Control": "no-cache"})
+    async def index(self, _request: web.Request) -> web.Response:
+        # Version the static files, so a browser never keeps old scripts after an update.
+        html = await asyncio.to_thread((paths.WWW / "index.html").read_text, encoding="utf-8")
+        html = re.sub(r'((?:src|href)="static/[^"?]+)"', rf'\1?v={__version__}"', html)
+        return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
 
     def build(self) -> web.Application:
-        app = web.Application(middlewares=[ingress_only, json_errors])
+        app = web.Application(middlewares=[ingress_only, no_stale_static, json_errors])
         app.router.add_get("/", self.index)
         app.router.add_static("/static/", paths.WWW / "static")
         app.router.add_get("/api/status", self.status)

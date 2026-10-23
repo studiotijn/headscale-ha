@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1
+
+- **Fix: the panel could keep showing the previous version after an update.** The browser cached
+  the scripts; they are now versioned and revalidated, so new features show up right away.
+
 ## 0.13.0
 
 - **Network map** in *Networks → Who may reach what?*: every network is a circle with its users,
