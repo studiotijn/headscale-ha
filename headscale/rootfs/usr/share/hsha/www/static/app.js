@@ -23,6 +23,8 @@ const STRINGS = {
     manual_add: "Handmatig toevoegen", ip_address: "IP-adres", protocol: "Protocol", resource: "Resource", add: "Toevoegen",
     test: "Testen", remove: "Verwijderen", how_to_connect: "Zo maak je verbinding",
     online: "online", offline: "offline", never: "nooit", expire: "Uitloggen", delete: "Verwijderen",
+    rename: "Naam wijzigen", rename_prompt: "Nieuwe naam voor dit apparaat. Alleen kleine letters, cijfers en streepjes; dit wordt ook de MagicDNS-naam ({name}.{domain}). De hostname op het apparaat zelf blijft gelijk.",
+    renamed: "Naam gewijzigd in {name}.",
     app_version: "App-versie", upd_check: "Controleren op updates", upd_update: "Bijwerken", upd_rebuild: "Herbouwen",
     upd_hint: "Herbouwen installeert de nieuwste code van GitHub, ook als het versienummer niet veranderde (om te testen).",
     upd_installed: "Geïnstalleerd", upd_latest: "Nieuwste", upd_auto: "Automatisch bijwerken", upd_uptodate: "Je hebt de nieuwste versie.",
@@ -55,6 +57,8 @@ const STRINGS = {
   en: {
     tab_overview: "Overview", tab_setup: "Setup", tab_devices: "Devices", tab_printers: "Printers",
     online: "online", offline: "offline", never: "never", expire: "Log out", delete: "Delete",
+    rename: "Rename", rename_prompt: "New name for this device. Lowercase letters, digits and dashes only; it also becomes the MagicDNS name ({name}.{domain}). The hostname on the device itself stays the same.",
+    renamed: "Renamed to {name}.",
     app_version: "App version", upd_check: "Check for updates", upd_update: "Update", upd_rebuild: "Rebuild",
     upd_hint: "Rebuild installs the newest code from GitHub even when the version number did not change (for testing).",
     upd_installed: "Installed", upd_latest: "Latest", upd_auto: "Auto update", upd_uptodate: "You have the latest version.",
@@ -272,6 +276,7 @@ async function loadNodes() {
     if (pending.length) actions.append(el("button", { class: "btn small", onclick: () => nodeAction(n.id, "approve") }, t("approve_routes")));
     if (typeof mtOn !== "undefined" && mtOn) actions.append(el("button", { class: "btn small", onclick: () => openNodeAccess(n.id) }, t("mt_access_btn")));
     actions.append(
+      el("button", { class: "btn secondary small", onclick: () => renameNode(n) }, t("rename")),
       el("button", { class: "btn secondary small", onclick: () => nodeAction(n.id, "expire") }, t("expire")),
       el("button", { class: "btn danger small", onclick: () => confirm(t("confirm_delete")) && nodeAction(n.id, "delete") }, t("delete")),
     );
@@ -285,6 +290,18 @@ async function loadNodes() {
       actions,
     );
   }));
+}
+
+let tailnetDomain = "";
+async function renameNode(n) {
+  if (!tailnetDomain) tailnetDomain = (await api("status").catch(() => ({}))).base_domain || "tailnet";
+  const name = prompt(t("rename_prompt").replace("{name}", "…").replace("{domain}", tailnetDomain), n.name);
+  if (name === null || !name.trim() || name.trim() === n.name) return;
+  try {
+    const r = await api(`nodes/${n.id}/rename`, { method: "POST", body: { name } });
+    banner(t("renamed").replace("{name}", r.name), "ok");
+    await loadNodes();
+  } catch (err) { banner(err.message); }
 }
 
 async function nodeAction(id, action) {

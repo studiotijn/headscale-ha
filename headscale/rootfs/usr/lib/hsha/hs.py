@@ -97,6 +97,23 @@ async def delete_node(node_id: int) -> None:
     await run("nodes", "delete", "--identifier", str(node_id), "--force")
 
 
+def dns_label(name: str) -> str:
+    """A Headscale node name is a DNS label: lowercase letters, digits and dashes."""
+    import re
+
+    label = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-")
+    return re.sub(r"-{2,}", "-", label)[:63].strip("-")
+
+
+async def rename_node(node_id: int, name: str) -> str:
+    """Change the name shown in the tailnet (given name / MagicDNS name), not the device's hostname."""
+    label = dns_label(name)
+    if not label:
+        raise ValueError("Use letters, digits and dashes")
+    await run("nodes", "rename", "--identifier", str(node_id), label)
+    return label
+
+
 async def expire_node(node_id: int) -> None:
     await run("nodes", "expire", "--identifier", str(node_id), "--force")
 

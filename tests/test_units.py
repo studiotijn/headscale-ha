@@ -484,3 +484,12 @@ def test_migrate_extract(tmp_path):
     assert meta["user"]["options"]["server_url"] == "https://hs.x"
     assert (tmp_path / "headscale/db.sqlite").read_bytes() == b"db"
     assert not (tmp_path.parent / "evil").exists()
+
+
+def test_dns_label():
+    from hsha.hs import dns_label
+
+    assert dns_label("Edgebox Site 3") == "edgebox-site-3"
+    assert dns_label("  --Ünïcode__box--") == "n-code-box"
+    assert dns_label("a" * 80) == "a" * 63
+    assert dns_label("!!!") == ""

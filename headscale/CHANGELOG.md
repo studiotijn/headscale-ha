@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.3
+
+- **Rename devices.** *Devices → Rename* changes the name a device has in the tailnet (and its
+  MagicDNS name), e.g. to tell several Edgeboxes with the same hostname apart. The hostname on
+  the device itself stays the same; the original hostname is shown below the name.
+
 ## 0.12.2
 
 - **Take over a previous installation.** Installed the app again from the repository under

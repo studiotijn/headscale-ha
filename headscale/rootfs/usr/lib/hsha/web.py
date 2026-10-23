@@ -132,6 +132,15 @@ class App:
             await hs.expire_node(node_id)
         elif action == "delete":
             await hs.delete_node(node_id)
+        elif action == "rename":
+            body = await request.json() if request.can_read_body else {}
+            others = [n for n in await hs.nodes() if int(n["id"]) != node_id]
+            taken = {(n.get("given_name") or n.get("name") or "").lower() for n in others}
+            if hs.dns_label(str(body.get("name") or "")) in taken:
+                raise ValueError("Another device already has this name")
+            name = await hs.rename_node(node_id, str(body.get("name") or ""))
+            self.manager.poke()
+            return web.json_response({"ok": True, "name": name})
         elif action == "move":
             body = await request.json() if request.can_read_body else {}
             user = str(body.get("user") or "").strip()
