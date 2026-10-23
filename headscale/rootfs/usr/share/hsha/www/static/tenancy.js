@@ -74,7 +74,12 @@ Object.assign(STRINGS.nl, {
   mt_move_confirm_server: "{name} naar {net} verplaatsen (andere server-tag)?",
   mt_moved: "{name} staat nu in {net}. Verbindingen van het oude netwerk gelden niet meer voor dit apparaat.",
   mt_make_server: "Registreren als server van dit netwerk", mt_make_server_hint: "Aanbevolen voor servers: het apparaat krijgt de tag van het netwerk, hangt niet meer aan een persoon en verloopt niet.",
-  mt_made_server: "Is nu een server.", mt_for: "Voor", mt_server_of: "🗄 Server in {x} (getagd, verloopt niet)",
+  mt_made_server: "Is nu een server.", mt_for: "Voor",
+  mt_owner: "Eigenaar van het nieuwe apparaat",
+  mt_owner_hint: "Een apparaat hoort bij precies één gebruiker, of is een server van een netwerk. Dat bepaalt in welk netwerk het komt en dus wat het mag. De rechten zelf stel je in bij Verbindingen.",
+  mt_way_key: "Laptop, pc of server", mt_way_key_hint: "Maak een sleutel en voer het commando uit op het apparaat.",
+  mt_way_phone: "Telefoon of tablet", mt_way_phone_hint: "Log in in de Tailscale-app; plak hier de link of het commando dat de app toont.",
+  mt_way_or: "of", mt_server_of: "🗄 Server in {x} (getagd, verloopt niet)",
   grp_servers: "Servers", grp_behind: "Achter routers", grp_ws: "Werkplekken (RDP/VNC/bestanden)", grp_people_src: "Personen en hun apparaten",
   mt_server_register: "Servers meld je aan met een sleutel, niet via de browser.",
 });
@@ -151,7 +156,12 @@ Object.assign(STRINGS.en, {
   mt_move_confirm_server: "Move {name} to {net} (other server tag)?",
   mt_moved: "{name} is now in {net}. Connections of the old network no longer apply to this device.",
   mt_make_server: "Register as a server of this network", mt_make_server_hint: "Recommended for servers: the device gets the network's tag, is no longer tied to a person and does not expire.",
-  mt_made_server: "Is now a server.", mt_for: "For", mt_server_of: "🗄 Server in {x} (tagged, does not expire)",
+  mt_made_server: "Is now a server.", mt_for: "For",
+  mt_owner: "Owner of the new device",
+  mt_owner_hint: "A device belongs to exactly one user, or is a server of a network. That decides which network it joins and so what it may do. The access itself is set under Connections.",
+  mt_way_key: "Laptop, PC or server", mt_way_key_hint: "Create a key and run the command on the device.",
+  mt_way_phone: "Phone or tablet", mt_way_phone_hint: "Sign in in the Tailscale app; paste the link or command the app shows here.",
+  mt_way_or: "or", mt_server_of: "🗄 Server in {x} (tagged, does not expire)",
   grp_servers: "Servers", grp_behind: "Behind routers", grp_ws: "Workstations (RDP/VNC/files)", grp_people_src: "People and their devices",
   mt_server_register: "Servers sign in with a key, not through the browser.",
 });
@@ -849,6 +859,12 @@ function mtDomainsView() {
       authId.value = ""; banner(t("registered"), "ok"); await loadNetworks();
     } catch (err) { banner(err.message); } finally { busy(regBtn, false); }
   });
+  const phoneWay = el("div", { class: "signin-way" }, el("strong", {}, t("mt_way_phone")), el("p", { class: "muted small" }, t("mt_way_phone_hint")),
+    el("div", { class: "row" }, Object.assign(mtField(t("register_label"), authId), { className: "field grow-field" }), regBtn));
+  // Servers sign in with a key only.
+  const syncWays = () => { phoneWay.classList.toggle("disabled", who.value.endsWith("|__server__")); regBtn.disabled = who.value.endsWith("|__server__"); };
+  who.addEventListener("change", syncWays);
+  syncWays();
   const nodeCard = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
     mtTable([t("name"), t("mt_role"), t("mt_domain"), "IP", t("status"), t("routes"), ""], groupNodeRows(mtData.nodes, 7, (n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
       el("td", {}, el("strong", {}, n.name), el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))),
@@ -859,12 +875,13 @@ function mtDomainsView() {
       el("td", { class: "mono" }, n.approved_routes.join("\n")),
       el("td", { class: "actions" }, el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); openNodeAccess(n.id); } }, t("mt_access_btn")))))),
     el("h3", {}, t("mt_add_device")),
-    el("div", { class: "row" }, mtField(t("mt_for"), who), mtField(t("valid_for"), hours), keyBtn), out,
-    el("div", { class: "row" }, mtField(t("mt_for"), who.cloneNode(true)), Object.assign(mtField(t("register_label"), authId), { className: "field grow-field" }), regBtn));
-  // keep both user selects in sync (the second one is used for approvals)
-  const who2 = nodeCard.querySelectorAll("select")[1];
-  who2.addEventListener("change", () => { who.value = who2.value; });
-  who.addEventListener("change", () => { who2.value = who.value; });
+    el("div", { class: "row" }, Object.assign(mtField(t("mt_owner"), who), { className: "field grow-field" })),
+    el("p", { class: "muted small" }, t("mt_owner_hint")),
+    el("div", { class: "signin-ways" },
+      el("div", { class: "signin-way" }, el("strong", {}, t("mt_way_key")), el("p", { class: "muted small" }, t("mt_way_key_hint")),
+        el("div", { class: "row" }, mtField(t("valid_for"), hours), keyBtn), out),
+      el("div", { class: "signin-or muted" }, t("mt_way_or")),
+      phoneWay));
   return [domCard, nodeCard];
 }
 

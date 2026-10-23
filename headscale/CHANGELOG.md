@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.2
+
+- *Networks and devices → Add a device* is clearer: one choice for the owner of the new device
+  (a user, or a server of a network), then two ways to sign it in: a key for a laptop, PC or
+  server, or approving a phone's sign-in. The phone way is greyed out for servers.
+
 ## 0.14.1
 
 - Fix: right after an automatic re-apply of the policy the panel briefly reported that the policy

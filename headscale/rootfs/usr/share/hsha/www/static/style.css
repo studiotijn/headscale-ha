@@ -360,3 +360,11 @@ svg.focus .ng-edge.hi { opacity: 1; stroke: var(--warn); stroke-width: 2.6; }
 .ng-key { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--primary); margin-left: 8px; }
 .ng-key:first-child { margin-left: 0; }
 .ng-key.off { border-top: 2px dashed var(--muted); }
+
+/* Signing in a device: one owner, two ways */
+.signin-ways { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; margin-top: 8px; }
+.signin-way { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.signin-way p { margin: 4px 0 8px; }
+.signin-way.disabled { opacity: .5; }
+.signin-or { align-self: center; }
+@media (max-width: 760px) { .signin-ways { grid-template-columns: 1fr; } .signin-or { justify-self: center; } }
