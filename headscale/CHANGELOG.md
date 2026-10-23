@@ -13,7 +13,7 @@
     *Server of …* per network.
   - The option `admin_user` follows the home network's user and is called *Home user*; its
     default for new installations is `home`.
-- **Generic names.** *Edgebox* is now *gateway* everywhere (tags stay `tag:<network>-<location>-edge`).
+- **Generic names.** The device at a location is now called *gateway* everywhere (tags stay `tag:<network>-<location>-edge`).
   Enabling networks creates one domain, *Home*, instead of Private, Work and Project.
 
 ## 0.14.2
