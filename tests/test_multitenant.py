@@ -43,9 +43,13 @@ NODES = [
 
 def build(**extra_conn):
     m = tn.default_model("admin")
-    assert [d["name"] for d in m["domains"]] == ["Private", "Work", "Project"]
-    m, _ = tn.apply_change(m, "domain", "update", {**m["domains"][1], "users": "work"})
-    m, _ = tn.apply_change(m, "domain", "update", {**m["domains"][2], "users": "anna"})
+    assert [d["id"] for d in m["domains"]] == ["home"]
+    # Users as they are before the app aligns them with the networks (sync_users).
+    m["domains"] = [
+        {"id": "private", "name": "Private", "kind": "domain", "users": ["admin"], "internal": "full", "home": True},
+        {"id": "work", "name": "Work", "kind": "domain", "users": ["work"], "internal": "full", "home": False},
+        {"id": "project", "name": "Project", "kind": "cluster", "users": ["anna"], "internal": "none", "home": False},
+    ]
     for n in (1, 2):
         m, _ = tn.apply_change(
             m,
@@ -125,7 +129,7 @@ def test_overlapping_vpn_subnets_rejected():
 @pytest.mark.parametrize(
     ("src", "dst", "message"),
     [
-        ("node:6", "dev:cam1", "Edgebox can never be a source"),
+        ("node:6", "dev:cam1", "gateway can never be a source"),
         ("dev:cam1", "node:1", "can never be a source"),
     ],
 )
@@ -159,7 +163,7 @@ def test_policy_is_deterministic_and_closed():
     assert a["sha256"] == b["sha256"] and a["text"] == b["text"]
     pol = a["policy"]
     srcs = {s for g in pol["grants"] for s in g["src"]}
-    # Nothing at a site (Edgebox, site subnet, device behind it) is ever a source.
+    # Nothing at a site (gateway, site subnet, device behind it) is ever a source.
     assert not any(s.endswith("-edge") or s.startswith(("loc-", "dev-")) for s in srcs)
     assert "node-6" not in srcs and "node-7" not in srcs
     # No wildcard rules.
@@ -174,7 +178,7 @@ def test_policy_tests_cover_isolation():
     by_src: dict[str, set] = {}
     for t in tests:
         by_src.setdefault(t["src"], set()).update(t.get("deny", []))
-    assert "node-1:22" in by_src["node-6"]  # Edgebox loc01 -> pc-thuis
+    assert "node-1:22" in by_src["node-6"]  # gateway loc01 -> pc-thuis
     assert "dev-cam2:22" in by_src["dev-cam1"]  # site -> other site
     assert "node-4:22" in by_src["node-1"]  # Private -> Work
     assert "node-1:22" in by_src["node-5"]  # client user -> Private
@@ -254,7 +258,6 @@ def test_generated_policy_accepted_by_headscale(tmp_path):
 
 def test_groups_users_and_profiles():
     m = build()
-    m, _ = tn.apply_change(m, "domain", "update", {**tn.domain(m, "project"), "users": "anna, piet"})
     m, _ = tn.apply_change(
         m, "group", "create", {"id": "beheer", "name": "Beheerders", "members": ["node:1", "user:work"]}
     )
@@ -276,7 +279,7 @@ def test_groups_users_and_profiles():
         m,
         "connection",
         "create",
-        {"id": "u2e", "name": "Piet", "src": "user:piet", "dst": "edge:loc02", "ports": "profile:ssh"},
+        {"id": "u2e", "name": "Piet", "src": "user:anna", "dst": "edge:loc02", "ports": "profile:ssh"},
     )
     tn.validate(m, NODES)
     r = pg.generate(m, ctx())
@@ -285,7 +288,7 @@ def test_groups_users_and_profiles():
     assert g["dst"] == ["dev-cam1", "dev-cam2"]
     assert g["ip"] == ["tcp:80", "tcp:8010", "tcp:22"]
     piet = next(x for x in r["policy"]["grants"] if x["#name"] == "Piet")
-    assert piet["src"] == ["piet@"] and piet["dst"] == ["tag:project-loc02-edge"]
+    assert piet["src"] == ["anna@"] and piet["dst"] == ["tag:project-loc02-edge"]
     nft2 = pg.edge_nftables(m, "loc02", ctx())
     assert "ip saddr { 100.64.0.1, 100.64.0.4 } ip daddr 192.168.1.10 tcp dport { 80, 8010, 22 } accept" in nft2
 
@@ -333,12 +336,11 @@ def test_edit_in_place_and_cascade():
     # Deleting a location removes its devices from connections, but keeps the rest of the connection.
     m, _ = tn.apply_change(m, "location", "delete", {"id": "loc02"})
     assert tn_conn(m, c["id"])["dst"] == ["dev:cam1"]
-    # Removing a user from a domain removes it from connections.
-    m, _ = tn.apply_change(
-        m, "connection", "create", {"id": "u", "src": "user:anna", "dst": "edge:loc01", "ports": "tcp:22"}
-    )
-    m, _ = tn.apply_change(m, "domain", "update", {**tn.domain(m, "project"), "users": ""})
-    assert all(x["id"] != "u" for x in m["connections"])
+    # Users are not edited through the model: one per network, kept in line by the app.
+    m2, _ = tn.apply_change(m, "domain", "update", {**tn.domain(m, "project"), "users": ""})
+    assert tn.domain(m2, "project")["users"] == ["anna"]
+    m3, _ = tn.apply_change(m, "domain", "create", {"id": "acme", "name": "ACME", "kind": "cluster", "users": "x"})
+    assert tn.domain(m3, "acme")["users"] == ["acme"]
 
 
 def test_access_overview():
@@ -389,9 +391,9 @@ def test_device_behind_a_router_gets_only_its_route():
     # a cluster user may reach it, but only through an explicit connection
     ok, _ = tn.apply_change(m, "connection", "create", {"src": "user:anna", "dst": "dev:prn", "ports": "*"})
     tn.validate(ok, NODES)
-    # not behind an Edgebox, not a tailnet address, not both location and router
+    # not behind an gateway, not a tailnet address, not both location and router
     for data, msg in (
-        ({"via": "node:6", "ip": "10.1.1.1"}, "Edgebox"),
+        ({"via": "node:6", "ip": "10.1.1.1"}, "gateway"),
         ({"via": "node:4", "ip": "100.64.0.9"}, "tailnet address"),
         ({"via": "node:4", "ip": "10.81.1.50"}, "VPN subnet"),
     ):
@@ -456,8 +458,8 @@ def test_device_types():
         3: "router",
         4: "workstation",
         5: "workstation",
-        6: "edgebox",
-        7: "edgebox",
+        6: "gateway",
+        7: "gateway",
     }
     srv = {**NODES[3], "id": 8, "name": "nas", "tags": ["tag:work-server"], "user": {"name": "tagged-devices"}}
     assert tn.node_role(m, srv) == "server" and tn.node_domain(m, srv) == "work"
@@ -511,3 +513,35 @@ def test_cluster_may_start_connections_and_is_closed_inside():
     internal = {g["#name"]: g for g in r["policy"]["grants"] if g["#name"].endswith(": internal")}
     assert set(internal) == {"Private: internal", "Work: internal"}
     assert "tag:work-server" in internal["Work: internal"]["src"]
+
+
+def test_rename_user_refs():
+    m = build()
+    m, _ = tn.apply_change(m, "group", "create", {"id": "g", "name": "G", "members": ["user:anna", "user:project"]})
+    m, _ = tn.apply_change(m, "connection", "create", {"id": "x", "src": "user:anna", "dst": "node:1", "ports": "*"})
+    assert tn.rename_user_refs(m, "anna", "project")
+    assert tn_conn(m, "x")["src"] == ["user:project"]
+    assert tn.group(m, "g")["members"] == ["user:project"]  # deduplicated
+    assert not tn.rename_user_refs(m, "anna", "project")
+
+
+def test_db_users(tmp_path):
+    import sqlite3
+
+    from hsha import hs
+
+    db = tmp_path / "db.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, display_name TEXT, deleted_at TEXT);"
+        "CREATE TABLE nodes (id INTEGER PRIMARY KEY, user_id INTEGER, tags TEXT, deleted_at TEXT);"
+        "INSERT INTO users VALUES (1, 'project', NULL, NULL), (2, 'piet', NULL, NULL);"
+        "INSERT INTO nodes VALUES (10, 1, '[]', NULL), (11, 2, '[]', NULL), (12, 2, '[]', NULL);"
+    )
+    con.commit()
+    con.close()
+    r = hs.db_users(str(db), {"project": "SRS/SHP"}, {"piet": "project"})
+    assert r == {"display": ["project"], "moved": 2}
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT display_name FROM users WHERE id = 1").fetchone() == ("SRS/SHP",)
+    assert con.execute("SELECT COUNT(*) FROM nodes WHERE user_id = 1").fetchone() == (3,)

@@ -63,7 +63,7 @@ function ngTargets(ref, points) {
   const [kind, key] = ref.split(/:(.*)/s);
   if (kind === "group") return ((mtGroup(key) || {}).members || []).flatMap((m) => ngTargets(m, points));
   if (kind === "edge") {
-    const n = mtData.nodes.find((x) => x.location === key && x.role === "edgebox") || mtData.nodes.find((x) => x.location === key);
+    const n = mtData.nodes.find((x) => x.location === key && x.role === "gateway") || mtData.nodes.find((x) => x.location === key);
     return n && points[`node:${n.id}`] ? [points[`node:${n.id}`]] : (points[`loc:${key}`] ? [points[`loc:${key}`]] : []);
   }
   return points[ref] ? [points[ref]] : [];

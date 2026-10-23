@@ -162,7 +162,7 @@ class App:
                 raise web.HTTPNotFound()
             routes = node.get("available_routes") or []
             if self.manager.mt is not None:
-                # Only routes the model allows (an Edgebox may offer only its own location).
+                # Only routes the model allows (a gateway may offer only its own location).
                 allowed = set(self.manager.mt.allowed_routes_for(node))
                 refused = sorted(set(routes) - allowed - {"0.0.0.0/0", "::/0"})
                 routes = sorted((set(routes) & allowed) | set(node.get("approved_routes") or []) & allowed)

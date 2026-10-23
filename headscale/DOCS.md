@@ -176,25 +176,29 @@ With the option `multi_tenant` (or *Networks → Enable access control*) one Hea
 
 Users and devices of both kinds can be the source of a connection: to single devices, or to
 everything of another cluster or domain. Inside a cluster, connections are also the only way two
-of its devices reach each other. *Private* (home, domain), *Work* (domain) and *Project*
-(cluster) are created when you enable it; rename them, change them or add more.
+of its devices reach each other. One domain, *Home*, is created when you enable it (with your
+current devices); rename it and add the domains and clusters you need.
 Off by default; with the option off nothing below changes.
 
-- **Networks.** A network owns Headscale users (its people's laptops and phones) and tagged
-  servers (`tag:<domain>-server`). Your existing `admin_user` becomes the *Private* domain, so
-  existing devices keep working. Devices of different networks cannot reach each other. The home
+- **Networks.** A network has exactly one Headscale user for its personal devices (laptops,
+  phones) and tagged servers (`tag:<domain>-server`). The user's name is the network's ID and its
+  display name is the network's name, so the Tailscale apps list each network's devices under
+  that name. The app keeps this in line: an existing user is renamed (devices keep their keys,
+  addresses and names), extra users are merged into it, and renaming a network updates the
+  display name (Headscale restarts for a few seconds). Your existing `admin_user` becomes the
+  *Home* domain, so existing devices keep working. Devices of different networks cannot reach each other. The home
   network (this app's subnet router) is always a domain.
-- **Locations** (sites, in a domain or a cluster). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
+- **Locations** (sites, in a domain or a cluster). Each site has a Linux **gateway** (`tag:<domain>-<location>-edge`)
   behind the local router. All sites may use the *same* local subnet (e.g. `192.168.1.0/24`, or
-  the fixed default address of the equipment you install): the Edgebox maps it 1:1 onto a unique
+  the fixed default address of the equipment you install): the gateway maps it 1:1 onto a unique
   VPN subnet, so local `192.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
   has no 4via6, so this mapping is what makes identical sites possible.
 - **Connections.** Only explicit connections are allowed. In *Networks → Connections* you pick
   *From* (users, devices, all users and servers of a network, or a group), *To* (users, devices,
-  devices at a site, a whole site, the Edgebox itself, everything of a network, or a group) and *Ports* (port profiles such as SSH or Web,
+  devices at a site, a whole site, the gateway itself, everything of a network, or a group) and *Ports* (port profiles such as SSH or Web,
   or your own: `tcp:8010`, `udp:2368`, `tcp:8000-8010`, `icmp`, *All ports*). Every connection can
   be edited in place, switched on/off or copied. The editor shows the effect as a sentence and
-  checks it while you type. Replies come back; nothing at a site (Edgebox or equipment behind it) can
+  checks it while you type. Replies come back; nothing at a site (gateway or equipment behind it) can
   start a connection.
 - **Groups and port profiles.** Groups bundle users, devices or sites (group → group in one
   connection). A group with site devices can only be a destination. Port profiles are named port
@@ -220,18 +224,18 @@ Off by default; with the option off nothing below changes.
   policy is kept in `/data/hsha/policy-history/`). The app generates the whole ACL policy,
   including a `tests` block with the isolation rules; Headscale refuses a policy whose tests fail.
   Device changes (a new laptop for a project user) are re-applied automatically.
-- **Edgebox.** *Locations → Edgebox key* gives a one-time `tailscale up` command with the right tag
+- **Gateway.** *Locations → Gateway key* gives a one-time `tailscale up` command with the right tag
   and route; *Firewall (nftables)* gives the NAT and an allowlist that only forwards the
-  configured connections. Load it with `nft -f`, enable `net.ipv4.ip_forward`, and give the Edgebox
+  configured connections. Load it with `nft -f`, enable `net.ipv4.ip_forward`, and give the gateway
   its own firewall zone on the site router. Download the firewall again after changing connections and
   run `conntrack -D -s 100.64.0.0/10` after revoking access.
-- **Routes.** An Edgebox may only have the VPN subnet of its own location approved; anything else is
+- **Routes.** A gateway may only have the VPN subnet of its own location approved; anything else is
   withdrawn automatically and logged. Other unexpected routes show up as warnings.
 - **Log.** Every change and applied policy is written to `/data/hsha/audit.jsonl` (in backups).
 - **Policy owner.** In this mode the app owns the ACL policy. Changes made in Headplane are reported
   as drift and replaced on the next *Apply*. *Share* in the Home network tab and printers
-  elsewhere apply to the Private domain only.
-- `dns_via_home` is ignored in this mode (it would send the DNS of work and project devices home).
+  elsewhere apply to the home network only.
+- `dns_via_home` is ignored in this mode (it would send the DNS of the devices of every network home).
   Devices that use routes to sites need *accept routes* (`tailscale set --accept-routes`, default
   on Windows/macOS/mobile).
 

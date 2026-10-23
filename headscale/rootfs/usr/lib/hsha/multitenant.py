@@ -13,7 +13,7 @@ import asyncio
 import logging
 import time
 
-from . import audit, hs, policygen, tenancy
+from . import audit, hs, policygen, supervisor, tenancy
 from .store import save_state
 from .tenancy import ModelError
 
@@ -61,7 +61,72 @@ class MultiTenant:
             self.model = new
             tenancy.save(self.model)
             audit.record("model", actor, summary, revision=self.model["revision"], data=data)
-            return self.model
+        if kind == "domain" and action != "delete" and self.model.get("activated"):
+            await self.sync_users(actor)
+        return self.model
+
+    # ------------------------------------------------------------ users
+    async def sync_users(self, actor: str | None = None) -> list[str]:
+        """One Headscale user per network: named after its ID, shown with its name.
+
+        Renames the current user (live), merges extra users into it (their devices move,
+        then the user is removed) and sets the display name Tailscale clients show. The
+        last two need Headscale stopped for a few seconds.
+        """
+        async with self._lock:
+            hs_users = {u.get("name"): u for u in await hs.users()}
+            done: list[str] = []
+            display: dict[str, str] = {}
+            merge: dict[str, str] = {}
+            for d in self.model["domains"]:
+                want = tenancy.user_for(d)
+                current = [u for u in d.get("users", []) if u in hs_users]
+                if want not in hs_users:
+                    source = next((u for u in current if u != want), None)
+                    if source:
+                        await hs.rename_user(source, want)
+                        hs_users[want] = {**hs_users.pop(source), "name": want}
+                        tenancy.rename_user_refs(self.model, source, want)
+                        done.append(f"user {source} renamed to {want}")
+                    else:
+                        await hs.create_user(want, d["name"])
+                        hs_users[want] = {"name": want, "display_name": d["name"]}
+                        done.append(f"user {want} created")
+                for extra in (u for u in current if u not in (want,) and u in hs_users):
+                    merge[extra] = want
+                    tenancy.rename_user_refs(self.model, extra, want)
+                if (hs_users[want].get("display_name") or "") != d["name"]:
+                    display[want] = d["name"]
+                if d.get("users") != [want]:
+                    d["users"] = [want]
+            if display or merge:
+                result = await hs.set_user_details(display, merge)
+                done.append(f"display names {', '.join(display) or '-'}; {result['moved']} device(s) moved")
+                for extra in merge:
+                    await hs.destroy_user(extra)
+                    done.append(f"user {extra} merged and removed")
+            if not done:
+                return []
+            home = tenancy.home_domain(self.model)
+            if home and self.opts.admin_user != tenancy.user_for(home):
+                await self._set_admin_user(tenancy.user_for(home))
+            self.model["revision"] = int(self.model.get("revision", 0)) + 1
+            tenancy.save(self.model)
+            audit.record("users", actor, "; ".join(done), revision=self.model["revision"])
+            log.info("Users: %s", "; ".join(done))
+            if self.model.get("activated"):
+                await self._apply(actor, "users")
+            return done
+
+    async def _set_admin_user(self, name: str) -> None:
+        """Keep the app option in line with the home network's user (no restart needed)."""
+        self.opts.raw["admin_user"] = name
+        current = await asyncio.to_thread(supervisor.self_options)
+        if current is not None and current.get("admin_user") != name:
+            try:
+                await asyncio.to_thread(supervisor.save_options, {**current, "admin_user": name})
+            except supervisor.SupervisorError as exc:
+                log.warning("Could not save admin_user=%s: %s", name, exc)
 
     async def dry_run(self, kind: str, action: str, data: dict) -> dict:
         """Validate a change without saving it (live feedback in the editors)."""
@@ -134,6 +199,12 @@ class MultiTenant:
         """Called from the manager loop: follow node changes, detect drift and odd routes."""
         if not self.model.get("activated"):
             return
+        if self._users_out_of_line(await hs.users()):
+            try:
+                await self.sync_users()
+            except (hs.HeadscaleError, ModelError) as exc:
+                self.last_error = f"Users: {exc}"
+                log.warning("Could not align users with the networks: %s", exc)
         nodes = await hs.nodes()
         await self._check_routes(nodes)
         applied = self.model.get("applied") or {}
@@ -156,6 +227,16 @@ class MultiTenant:
             live = await hs.get_policy() or ""
             self.drift = policygen.HEADER.splitlines()[0] not in live or (applied.get("sha256", "")[:16] not in live)
 
+    def _users_out_of_line(self, hs_users: list[dict]) -> bool:
+        by_name = {u.get("name"): u for u in hs_users}
+        for d in self.model["domains"]:
+            want = tenancy.user_for(d)
+            if d.get("users") != [want] or want not in by_name:
+                return True
+            if (by_name[want].get("display_name") or "") != d["name"]:
+                return True
+        return False
+
     async def _sync_device_routes(self, nodes: list[dict]) -> None:
         """Approve exactly <ip>/32 for devices behind a router that a connection uses; withdraw the rest.
 
@@ -167,7 +248,7 @@ class MultiTenant:
         for n in nodes:
             nid = str(n["id"])
             if tenancy.node_location(self.model, n):
-                continue  # Edgeboxes: their location subnet, handled below
+                continue  # gateways: their location subnet, handled below
             wanted = set(tenancy.device_routes(self.model, int(n["id"])))
             before = set(managed.get(nid, []))
             approved = set(n.get("approved_routes") or [])
@@ -210,11 +291,11 @@ class MultiTenant:
             name = n.get("given_name") or n.get("name")
             approved = set(n.get("approved_routes") or []) - {"0.0.0.0/0", "::/0"}
             if tenancy.node_location(self.model, n) and approved - allowed:
-                # Edgeboxes are fully managed: withdraw anything outside their own location.
+                # gateways are fully managed: withdraw anything outside their own location.
                 keep = sorted(approved & allowed)
                 await hs.approve_routes(int(n["id"]), keep)
                 audit.record("route-revoked", None, f"{name}: withdrew {', '.join(sorted(approved - allowed))}")
-                log.warning("Withdrew routes outside the model from Edgebox %s: %s", name, sorted(approved - allowed))
+                log.warning("Withdrew routes outside the model from gateway %s: %s", name, sorted(approved - allowed))
                 approved = set(keep)
             for r in sorted(approved - allowed):
                 warnings.append(f"{name}: route {r} is approved but not part of the model")
@@ -247,7 +328,7 @@ class MultiTenant:
             raise ModelError("Unknown location")
         tag = tenancy.edge_tag(loc)
         if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
-            raise ModelError("Apply the policy first, so the Edgebox tag exists")
+            raise ModelError("Apply the policy first, so the gateway tag exists")
         key = await hs.create_preauthkey(tags=[tag], expiration="1h")
         audit.record("edge-key", actor, f"one-time key for {loc['name']} ({tag})")
         return {"tag": tag, "command": policygen.edge_up_command(loc, self.opts.server_url_clean, key)}
@@ -262,7 +343,7 @@ class MultiTenant:
         if dom is None:
             raise ModelError("This device is not part of a network yet")
         if tenancy.node_location(self.model, node) or "tag:homerouter" in tenancy.node_tags(node):
-            raise ModelError("Routers and Edgeboxes keep their own tag")
+            raise ModelError("Routers and gateways keep their own tag")
         tag = tenancy.server_tag(dom)
         if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
             raise ModelError("Apply the policy first, so the server tag exists")
@@ -278,7 +359,7 @@ class MultiTenant:
         if node is None:
             raise ModelError("Unknown device")
         if tenancy.node_location(self.model, node) or "tag:homerouter" in tenancy.node_tags(node):
-            raise ModelError("Routers and Edgeboxes stay in their own network")
+            raise ModelError("Routers and gateways stay in their own network")
         target = tenancy.domain(self.model, domain_id)
         if target is None:
             raise ModelError("Unknown network")

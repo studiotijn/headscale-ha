@@ -34,8 +34,8 @@ configuration:
     name: DNS-servers
     description: DNS-servers die apparaten in het tailnet krijgen.
   admin_user:
-    name: Beheerder
-    description: Headscale-gebruiker die eigenaar is van apparaten die je hier toevoegt en volledige toegang krijgt in het eerste ACL-beleid.
+    name: Gebruiker thuisnetwerk
+    description: Headscale-gebruiker die eigenaar is van de apparaten van het thuisnetwerk. Met multi-tenant netwerken zet de app dit op de ID van het thuisnetwerk.
   node_expiry_days:
     name: Verloop apparaatsleutel (dagen)
     description: Apparaten moeten na zoveel dagen opnieuw inloggen. 0 = nooit (afgeraden). Getagde apparaten verlopen nooit.
@@ -66,7 +66,7 @@ configuration:
   multi_tenant:
     name: Multi-tenant netwerken (optioneel)
     description: >-
-      Beheer meerdere gescheiden netwerken in één Headscale: domeinen (binnen alles verbonden) en clusters (binnen dicht), met Edgebox-locaties. Toegang tussen netwerken staat dicht tot je een verbinding toevoegt. Na aanzetten: tabblad Netwerken → Activeren. dns_via_home wordt dan genegeerd.
+      Beheer meerdere gescheiden netwerken in één Headscale: domeinen (binnen alles verbonden) en clusters (binnen dicht), met locaties achter een gateway. Toegang tussen netwerken staat dicht tot je een verbinding toevoegt. Na aanzetten: tabblad Netwerken → Activeren. dns_via_home wordt dan genegeerd.
   printer_domain:
     name: Printerdomein
     description: DNS-SD-domein voor AirPrint, bijv. printers.home.arpa.

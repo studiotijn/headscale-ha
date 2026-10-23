@@ -1,4 +1,4 @@
-"""Generate the ACL policy (and the Edgebox firewall) from the multi-tenant model.
+"""Generate the ACL policy (and the gateway firewall) from the multi-tenant model.
 
 Pure functions: the same model and node list always give the same text and hash,
 so every applied policy is reproducible and can be compared.
@@ -8,8 +8,8 @@ Enforcement layers
 1. Headscale policy (this module): default deny; each node filters what it receives.
    The policy carries a ``tests`` block with the traffic matrix, including the
    isolation invariants. Headscale refuses to load a policy whose tests fail.
-2. Route approval: an Edgebox may only offer the VPN subnet of its own location.
-3. nftables on the Edgebox (``edge_nftables``): NAT 10.81.<n>.y <-> local .y and an
+2. Route approval: a gateway may only offer the VPN subnet of its own location.
+3. nftables on the gateway (``edge_nftables``): NAT 10.81.<n>.y <-> local .y and an
    allowlist for forwarded traffic, independent of layer 1.
 """
 
@@ -239,7 +239,7 @@ def _endpoint(model: dict, ref: str, node_ref, is_src: bool, home_routes: list[s
         return [f"{key}@"] if tn.user_domain(model, key) else []
     if kind == "domain":
         # Everything a network has: its users' devices and servers, and as a destination
-        # also its locations (Edgebox and site subnet) and, for the home network, the home LAN.
+        # also its locations (gateway and site subnet) and, for the home network, the home LAN.
         d = tn.domain(model, key)
         if not d:
             return []
@@ -271,7 +271,7 @@ def _endpoint(model: dict, ref: str, node_ref, is_src: bool, home_routes: list[s
 
 # ------------------------------------------------------------------ tests
 def _reps(model: dict, ctx: Context, domain_id: str, node_ref) -> list[str]:
-    """Up to MAX_REPS user-owned or server nodes of a domain (no Edgeboxes), as host aliases."""
+    """Up to MAX_REPS user-owned or server nodes of a domain (no gateways), as host aliases."""
     out = []
     for n in ctx.nodes:
         if tn.node_domain(model, n) == domain_id and not tn.node_location(model, n):
@@ -389,7 +389,7 @@ def _source_ips(model: dict, ctx: Context, refs) -> list[str]:
     return sorted(ips, key=ipaddress.ip_address)
 
 
-# ------------------------------------------------------------------ Edgebox
+# ------------------------------------------------------------------ gateway
 def _nft_ports(ports: list[str]) -> list[str]:
     """Model ports -> nftables match fragments (one rule per fragment)."""
     if "*" in ports:
@@ -412,7 +412,7 @@ def _nft_ports(ports: list[str]) -> list[str]:
 
 
 def edge_nftables(model: dict, loc_id: str, ctx: Context, sha: str | None = None) -> str:
-    """nftables ruleset for the Edgebox of a location (second, independent enforcement layer)."""
+    """nftables ruleset for the gateway of a location (second, independent enforcement layer)."""
     loc = tn.location(model, loc_id)
     if loc is None:
         raise tn.ModelError(f"Unknown location {loc_id}")

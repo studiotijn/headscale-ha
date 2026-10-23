@@ -10,7 +10,7 @@ docker build -t headscale-ha:test headscale && tests/smoke.sh headscale-ha:test
   ingress guard.
 - **`tests/test_multitenant.py`** tests the policy generator. With `headscale` on the `PATH`, the
   generated policy is also checked by the real Headscale.
-- **`tests/edge_dataplane.sh`** checks the generated Edgebox firewall (NAT + allowlist) with real
+- **`tests/edge_dataplane.sh`** checks the generated gateway firewall (NAT + allowlist) with real
   packets in a network namespace. Use `sudo` where unprivileged user namespaces are blocked.
 - **`tests/fake_printer.py`** and **`tests/fake_devices.py`** simulate printers and home-network
   devices.

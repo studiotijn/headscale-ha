@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.15.0
+
+- **One user per network, named after it.** Every domain and cluster has exactly one Headscale
+  user: its name is the network's ID, its display name the network's name. The Tailscale apps
+  list each network's devices under that name.
+  - Existing users are renamed automatically (devices keep their keys, addresses and names);
+    extra users of a network are merged into it. Headscale restarts once for a few seconds to set
+    the display names (database backup `db.sqlite.before-users`).
+  - Renaming a network updates its display name.
+  - The *Users* field is gone from the network dialog; *Add a device* offers *Device of …* or
+    *Server of …* per network.
+  - The option `admin_user` follows the home network's user and is called *Home user*; its
+    default for new installations is `home`.
+- **Generic names.** *Edgebox* is now *gateway* everywhere (tags stay `tag:<network>-<location>-edge`).
+  Enabling networks creates one domain, *Home*, instead of Private, Work and Project.
+
 ## 0.14.2
 
 - *Networks and devices → Add a device* is clearer: one choice for the owner of the new device
@@ -35,7 +51,7 @@
 ## 0.13.0
 
 - **Network map** in *Networks → Who may reach what?*: every network is a circle with its users,
-  devices and locations inside (locations as smaller circles with their Edgebox and equipment).
+  devices and locations inside (locations as smaller circles with their gateway and equipment).
   Connections are arrows from the side that starts the connection to the destination; disabled
   connections are dashed. Click a network, location, user or device to see its access below the
   map; the arrows involved are highlighted.
@@ -45,7 +61,7 @@
 ## 0.12.3
 
 - **Rename devices.** *Devices → Rename* changes the name a device has in the tailnet (and its
-  MagicDNS name), e.g. to tell several Edgeboxes with the same hostname apart. The hostname on
+  MagicDNS name), e.g. to tell several gateways with the same hostname apart. The hostname on
   the device itself stays the same; the original hostname is shown below the name.
 
 ## 0.12.2
@@ -94,7 +110,7 @@
   (kinds private / work / project), without users except your admin user. Rename them, change
   them or add more. Existing installations keep their names; the kind `client` becomes `project`.
 - **Device types.** Every VPN device is a *server*, *workstation* or *phone/tablet* (automatic,
-  or set it yourself in the device dialog). Routers and Edgeboxes are recognised.
+  or set it yourself in the device dialog). Routers and gateways are recognised.
   - Pickers offer servers and equipment first as destinations, and people and their devices
     first as sources. Phones are not offered as destinations.
   - A connection to a workstation for anything other than remote desktop, VNC, SSH or file
@@ -127,14 +143,14 @@
 - **Networks tab, easy editing:** every connection, location, device, domain, group and port
   profile is edited in place in a dialog (no more delete and re-create).
   - Connections have several sources and destinations: users, devices, all users of a domain,
-    groups → devices, whole sites, Edgeboxes, users, domains, groups.
+    groups → devices, whole sites, gateways, users, domains, groups.
   - **Groups** (group → group) and **port profiles** (SSH, Web, RDP, VNC, SMB, Modbus TCP, OPC UA,
     MQTT, Ping, plus your own); changing a profile changes every connection that uses it.
   - Port buttons plus free entry, a plain-language sentence, and a live check that shows why a
     connection would be refused before you save.
   - *Who can reach what?*: outgoing and incoming access of any user, device, group or site.
   - Sub-tabs, search, on/off switch and copy per connection.
-- Edgebox firewall merges a host into a whole-site subnet in the same rule (nftables rejects overlaps).
+- Gateway firewall merges a host into a whole-site subnet in the same rule (nftables rejects overlaps).
 - Connections from 0.7.0 are migrated automatically.
 - README: *Add App repository to my Home Assistant* button and an overview of all features.
 
@@ -142,15 +158,15 @@
 
 - **Multi-tenant networks (optional, option `multi_tenant`, off by default).** Separated network
   domains (private, work, clients) in one Headscale, managed in a new *Networks* tab:
-  - Domains with their own users and tags; client locations with an Edgebox each. Sites may share
-    one local subnet (e.g. 192.168.1.0/24); the Edgebox maps it 1:1 onto `10.81.<n>.0/24`.
-  - Explicit connections (device / all users of a domain → device, site subnet, Edgebox, port list).
+  - Domains with their own users and tags; client locations with a gateway each. Sites may share
+    one local subnet (e.g. 192.168.1.0/24); the gateway maps it 1:1 onto `10.81.<n>.0/24`.
+  - Explicit connections (device / all users of a domain → device, site subnet, gateway, port list).
     Everything else is denied; sites and client domains can never start connections to other domains.
   - The ACL policy is generated (grants, hosts, autoApprovers) with a `tests` block holding the
     isolation rules, previewed and checked by Headscale before it is applied. Drift detection,
     automatic re-apply after device changes, audit log, policy history.
-  - Edgebox: one-time tagged key + `tailscale up` command, generated nftables (NAT + allowlist).
-    Routes outside the model are withdrawn from Edgeboxes.
+  - Gateway: one-time tagged key + `tailscale up` command, generated nftables (NAT + allowlist).
+    Routes outside the model are withdrawn from gateways.
   - Device keys and phone approvals per domain/user; route approval only for routes in the model.
 - `headscale policy` errors now show every failed test.
 

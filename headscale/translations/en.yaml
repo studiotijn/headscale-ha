@@ -34,8 +34,8 @@ configuration:
     name: DNS servers
     description: DNS servers pushed to devices on the tailnet.
   admin_user:
-    name: Admin user
-    description: Headscale user that owns devices added from this panel and gets full access in the initial ACL policy.
+    name: Home user
+    description: Headscale user that owns the devices of the home network. With multi-tenant networks the app sets it to the home network's ID.
   node_expiry_days:
     name: Device key expiry (days)
     description: Devices must sign in again after this many days. 0 disables expiry (not recommended). Tagged devices never expire.
@@ -66,7 +66,7 @@ configuration:
   multi_tenant:
     name: Multi-tenant networks (optional)
     description: >-
-      Manage several separated networks in one Headscale: domains (everything inside connected) and clusters (closed inside), with Edgebox sites. Access between networks is closed until you add a connection. After enabling: Networks tab → Activate. dns_via_home is then ignored.
+      Manage several separated networks in one Headscale: domains (everything inside connected) and clusters (closed inside), with sites behind a gateway. Access between networks is closed until you add a connection. After enabling: Networks tab → Activate. dns_via_home is then ignored.
   printer_domain:
     name: Printer domain
     description: DNS-SD domain for AirPrint, e.g. printers.home.arpa.

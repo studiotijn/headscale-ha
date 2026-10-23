@@ -34,7 +34,7 @@ wizard tests every step, from DNS and port forwards to the certificate as your d
 - **Home network assistants** for UniFi Protect, Prusa and Plex.
 - **Multi-tenant networks** (optional): separated networks as *domains* (connected inside) or
   *clusters* (closed inside), with a connections editor, a network map, port profiles and
-  Edgeboxes for sites.
+  gateways for sites.
 - **Backup support**: all data is under `/data` and included in Home Assistant backups.
 - **Pinned components**: every upstream part has a fixed version; the Headscale binary is
   checksum-verified.

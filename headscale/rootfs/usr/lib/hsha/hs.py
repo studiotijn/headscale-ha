@@ -89,6 +89,22 @@ async def ensure_user(name: str) -> dict:
     raise HeadscaleError(f"could not create user {name}")
 
 
+async def create_user(name: str, display_name: str | None = None) -> None:
+    args = ["users", "create", name]
+    if display_name:
+        args += ["--display-name", display_name]
+    await run(*args)
+
+
+async def rename_user(old: str, new: str) -> None:
+    """Live rename; devices keep their keys, IPs and names."""
+    await run("users", "rename", "--name", old, "--new-name", new)
+
+
+async def destroy_user(name: str) -> None:
+    await run("users", "destroy", "--name", name, "--force")
+
+
 async def nodes() -> list[dict]:
     return await run("nodes", "list") or []
 
@@ -280,3 +296,56 @@ def _backup(db: str, target: str) -> None:
     finally:
         src.close()
         dst.close()
+
+
+# ------------------------------------------------------------------ user display names / merging
+def db_users(db_path: str, display: dict[str, str], merge: dict[str, str]) -> dict:
+    """Set users' display names and move the devices of ``merge`` keys to their value user.
+
+    The CLI cannot change a display name or a device's owner, so this edits the database
+    (Headscale must be stopped).
+    """
+    import sqlite3
+
+    con = sqlite3.connect(db_path, timeout=10)
+    try:
+        ucols = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+        ncols = {r[1] for r in con.execute("PRAGMA table_info(nodes)")}
+        if not {"id", "name", "display_name"} <= ucols or not {"id", "user_id", "tags"} <= ncols:
+            raise HeadscaleError("Unexpected Headscale database layout; not changing it")
+
+        def uid(name: str) -> int:
+            row = con.execute(
+                "SELECT id FROM users WHERE name = ? AND deleted_at IS NULL ORDER BY id LIMIT 1", (name,)
+            ).fetchone()
+            if row is None:
+                raise HeadscaleError(f"User {name} does not exist")
+            return row[0]
+
+        moved = 0
+        with con:
+            for name, shown in display.items():
+                con.execute("UPDATE users SET display_name = ? WHERE id = ?", (shown, uid(name)))
+            for old, new in merge.items():
+                cur = con.execute(
+                    "UPDATE nodes SET user_id = ? WHERE user_id = ? AND deleted_at IS NULL", (uid(new), uid(old))
+                )
+                moved += cur.rowcount
+        return {"display": sorted(display), "moved": moved}
+    finally:
+        con.close()
+
+
+async def set_user_details(display: dict[str, str], merge: dict[str, str], stop=None, start=None) -> dict:
+    """Apply db_users with Headscale stopped for a few seconds (database backup first)."""
+    if not display and not merge:
+        return {"display": [], "moved": 0}
+    db = str(paths.HS_DIR / "db.sqlite")
+    stop, start = stop or _stop_headscale, start or _start_headscale
+    await stop()
+    try:
+        await asyncio.to_thread(_backup, db, f"{db}.before-users")
+        return await asyncio.to_thread(db_users, db, display, merge)
+    finally:
+        await start()
+        await wait_healthy(timeout=60)

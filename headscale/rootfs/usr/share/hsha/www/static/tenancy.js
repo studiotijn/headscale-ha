@@ -24,7 +24,7 @@ Object.assign(STRINGS.nl, {
   mt_sentence: "{from} mag naar {to} op {ports}.",
   mt_check_ok_short: "Klopt.", mt_checking: "Controleren…",
   ref_user: "{x}", ref_domain_src: "Alle gebruikers en servers van {x}", ref_domain_dst: "Alles van {x}",
-  ref_loc: "{x}: hele locatie", ref_edge: "{x}: Edgebox zelf",
+  ref_loc: "{x}: hele locatie", ref_edge: "{x}: de gateway zelf",
   grp_people: "Gebruikers", grp_devices: "Apparaten", grp_groups: "Groepen",
   mt_access_intro: "Kies een gebruiker, apparaat, groep of locatie en zie wat die mag bereiken en door wie die bereikbaar is.",
   mt_subject: "Kies…", mt_out: "Mag naar", mt_in: "Bereikbaar vanaf", mt_nothing: "Niets.",
@@ -33,18 +33,20 @@ Object.assign(STRINGS.nl, {
   mt_members: "Leden", mt_used_by: "gebruikt in {n} verbinding(en)",
   mt_profiles: "Poortprofielen", mt_profiles_intro: "Vaste sets poorten. Pas je een profiel aan, dan veranderen alle verbindingen die het gebruiken mee.",
   mt_profile_ports: "Poorten (bv. tcp:80, tcp:443, udp:2368, icmp)",
-  mt_locations: "Locaties (Edgeboxes)", mt_loc_intro: "Alle locaties mogen hetzelfde lokale subnet gebruiken (bv. 192.168.1.0/24). De Edgebox vertaalt 1-op-1: lokaal 192.168.1.y is via het VPN 10.81.<nummer>.y.",
+  mt_locations: "Locaties (gateways)", mt_loc_intro: "Alle locaties mogen hetzelfde lokale subnet gebruiken (bv. 192.168.1.0/24). De gateway vertaalt 1-op-1: lokaal 192.168.1.y is via het VPN 10.81.<nummer>.y.",
   mt_number: "Nummer", mt_domain: "Netwerk", mt_local: "Lokaal subnet", mt_vpn: "VPN-subnet", mt_vpn_auto: "automatisch 10.81.<nr>.0/24",
-  mt_iface: "LAN-interface Edgebox", mt_edge: "Edgebox", mt_edge_none: "nog niet aangemeld", mt_route_ok: "route actief", mt_route_wait: "route niet goedgekeurd",
-  mt_edge_key: "Sleutel Edgebox", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Voer uit op de Edgebox (sleutel 1 uur geldig, eenmalig):",
-  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet de Edgebox op de router van de locatie in een eigen firewallzone.",
+  mt_iface: "LAN-interface van de gateway", mt_edge: "Gateway", mt_edge_none: "nog niet aangemeld", mt_route_ok: "route actief", mt_route_wait: "route niet goedgekeurd",
+  mt_edge_key: "Sleutel voor gateway", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Voer uit op de gateway (sleutel 1 uur geldig, eenmalig):",
+  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet de gateway op de router van de locatie in een eigen firewallzone.",
   mt_devices: "Apparaten op locaties", mt_local_ip: "Lokaal IP", mt_vpn_ip: "VPN-IP", mt_location: "Locatie",
-  mt_domains: "Netwerken", mt_kind: "Soort", mt_users: "Gebruikers", mt_internal_policy: "Intern beleid",
+  mt_domains: "Netwerken", mt_kind: "Soort", mt_users: "Gebruiker", mt_internal_policy: "Intern beleid",
+  mt_id_hint: "Wordt ook de gebruikersnaam in Headscale. Kan later niet meer veranderen.",
+  mt_name_hint: "Tailscale toont deze naam bij de apparaten van dit netwerk.",
+  ref_user_of: "Apparaten van {x}", mt_owner_device: "📱 Apparaat van {x}",
   kind_domain: "domein", kind_cluster: "cluster",
   internal_full: "alles binnen het domein is onderling verbonden", internal_none: "standaard geen verbindingen, ook niet onderling",
   kind_hint_domain: "Domein: alle gebruikers, servers en locaties binnen het domein bereiken elkaar volledig.",
   kind_hint_cluster: "Cluster: apparaten binnen het cluster bereiken elkaar standaard niet. Gebruikers en apparaten ervan krijgen alleen toegang via verbindingen, naar losse apparaten of naar alles van een ander cluster of domein.",
-  mt_users_hint: "Headscale-gebruikers, met komma's. Bij een cluster: één gebruiker per persoon.",
   mt_nodes: "Apparaten in het VPN", mt_unassigned: "zonder netwerk (geen toegang)",
   mt_add_device: "Apparaat aanmelden", mt_user: "Gebruiker",
   mt_audit: "Logboek", mt_none_yet: "Nog niets.", mt_route_warn: "Routecontrole",
@@ -52,9 +54,9 @@ Object.assign(STRINGS.nl, {
   mt_pending_hint: "Opgeslagen. Druk op Toepassen om het live te zetten.",
   mt_off_title: "Netwerken en toegangsbeheer",
   mt_off_intro: "Hier stel je per apparaat, gebruiker en groep in wie met wie mag verbinden en welke poorten openstaan. De app zet daarmee ook de routering: alleen de adressen die je openzet worden doorgerouteerd. Dit staat nu uit; zolang het uit staat geldt het huidige beleid (beheerders mogen alles).",
-  mt_off_steps: "Na inschakelen: de app herstart (± 30 s), je huidige apparaten komen in het domein Privé, en er verandert nog niets aan de toegang tot je op Activeren drukt.",
+  mt_off_steps: "Na inschakelen: de app herstart (± 30 s), je huidige apparaten komen in het domein Home (de naam kun je wijzigen), en er verandert nog niets aan de toegang tot je op Activeren drukt.",
   mt_enable: "Toegangsbeheer inschakelen", mt_enabling: "Inschakelen… de app herstart.",
-  mt_via: "Bereikbaar via", mt_via_site: "Locatie (Edgebox)", mt_via_node: "Via een VPN-apparaat (router)",
+  mt_via: "Bereikbaar via", mt_via_site: "Locatie (gateway)", mt_via_node: "Via een VPN-apparaat (router)",
   mt_access_btn: "Toegang", mt_node_groups: "Lid van groepen", mt_no_groups: "Nog geen groepen. Maak er een onder Groepen en poorten.",
   mt_behind: "Apparaten achter dit apparaat (routering)",
   mt_behind_intro: "Adressen in het netwerk achter dit apparaat. Pas als je er een poort voor openzet, keurt de app precies dat adres (/32) goed als route; de rest van dat netwerk blijft onbereikbaar.",
@@ -65,7 +67,7 @@ Object.assign(STRINGS.nl, {
   mt_give_access: "Toegang geven", mt_add_access: "Toegang toevoegen",
   mt_devices_all: "Apparaten op locaties en achter routers",
   mt_add_behind: "Adres achter dit apparaat toevoegen", mt_used_in: "Open via:",
-  mt_role: "Type", role_server: "Server", role_workstation: "Werkplek", role_mobile: "Telefoon/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatisch ({x})",
+  mt_role: "Type", role_server: "Server", role_workstation: "Werkplek", role_mobile: "Telefoon/tablet", role_router: "Router (Home Assistant)", role_gateway: "Gateway", role_auto: "Automatisch ({x})",
   mt_role_hint: "Servers zijn de gewone bestemmingen. Een werkplek is meestal alleen bestemming voor Remote Desktop, VNC of bestanden delen; een telefoon nooit.",
   mt_network: "Netwerk", mt_move: "Verplaatsen",
   mt_move_hint: "Verplaatst het apparaat naar een ander netwerk: het krijgt die gebruiker als eigenaar en houdt zijn naam en IP-adres. Headscale herstart daarvoor een paar seconden; er hoeft niets op het apparaat te gebeuren.",
@@ -106,7 +108,7 @@ Object.assign(STRINGS.en, {
   mt_sentence: "{from} may reach {to} on {ports}.",
   mt_check_ok_short: "Looks right.", mt_checking: "Checking…",
   ref_user: "{x}", ref_domain_src: "All users and servers of {x}", ref_domain_dst: "Everything of {x}",
-  ref_loc: "{x}: whole location", ref_edge: "{x}: the Edgebox itself",
+  ref_loc: "{x}: whole location", ref_edge: "{x}: the gateway itself",
   grp_people: "Users", grp_devices: "Devices", grp_groups: "Groups",
   mt_access_intro: "Pick a user, device, group or location and see what it may reach and who may reach it.",
   mt_subject: "Choose…", mt_out: "May reach", mt_in: "Reachable from", mt_nothing: "Nothing.",
@@ -115,18 +117,20 @@ Object.assign(STRINGS.en, {
   mt_members: "Members", mt_used_by: "used in {n} connection(s)",
   mt_profiles: "Port profiles", mt_profiles_intro: "Fixed sets of ports. When you change a profile, every connection that uses it changes too.",
   mt_profile_ports: "Ports (e.g. tcp:80, tcp:443, udp:2368, icmp)",
-  mt_locations: "Locations (Edgeboxes)", mt_loc_intro: "All locations may use the same local subnet (e.g. 192.168.1.0/24). The Edgebox maps it 1:1: local 192.168.1.y is 10.81.<number>.y over the VPN.",
+  mt_locations: "Locations (gateways)", mt_loc_intro: "All locations may use the same local subnet (e.g. 192.168.1.0/24). The gateway maps it 1:1: local 192.168.1.y is 10.81.<number>.y over the VPN.",
   mt_number: "Number", mt_domain: "Network", mt_local: "Local subnet", mt_vpn: "VPN subnet", mt_vpn_auto: "automatic 10.81.<no>.0/24",
-  mt_iface: "Edgebox LAN interface", mt_edge: "Edgebox", mt_edge_none: "not signed in yet", mt_route_ok: "route active", mt_route_wait: "route not approved",
-  mt_edge_key: "Edgebox key", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Run on the Edgebox (key valid for 1 hour, single use):",
-  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the Edgebox in its own firewall zone on the location's router.",
+  mt_iface: "Gateway LAN interface", mt_edge: "Gateway", mt_edge_none: "not signed in yet", mt_route_ok: "route active", mt_route_wait: "route not approved",
+  mt_edge_key: "Gateway key", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Run on the gateway (key valid for 1 hour, single use):",
+  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the gateway in its own firewall zone on the location's router.",
   mt_devices: "Devices at locations", mt_local_ip: "Local IP", mt_vpn_ip: "VPN IP", mt_location: "Location",
-  mt_domains: "Networks", mt_kind: "Kind", mt_users: "Users", mt_internal_policy: "Internal policy",
+  mt_domains: "Networks", mt_kind: "Kind", mt_users: "User", mt_internal_policy: "Internal policy",
+  mt_id_hint: "Also becomes the user name in Headscale. Can't be changed later.",
+  mt_name_hint: "Tailscale shows this name for the devices of this network.",
+  ref_user_of: "Devices of {x}", mt_owner_device: "📱 Device of {x}",
   kind_domain: "domain", kind_cluster: "cluster",
   internal_full: "everything in the domain is connected", internal_none: "no connections by default, not even inside",
   kind_hint_domain: "Domain: all users, servers and locations inside the domain fully reach each other.",
   kind_hint_cluster: "Cluster: devices inside the cluster don't reach each other by default. Its users and devices only get access through connections, to single devices or to everything of another cluster or domain.",
-  mt_users_hint: "Headscale users, comma separated. For a cluster: one user per person.",
   mt_nodes: "Devices in the VPN", mt_unassigned: "no network (no access)",
   mt_add_device: "Add a device", mt_user: "User",
   mt_audit: "Log", mt_none_yet: "Nothing yet.", mt_route_warn: "Route check",
@@ -134,9 +138,9 @@ Object.assign(STRINGS.en, {
   mt_pending_hint: "Saved. Press Apply to make it live.",
   mt_off_title: "Networks and access control",
   mt_off_intro: "Here you set per device, user and group who may connect to whom and which ports are open. The app also sets the routing from that: only the addresses you open are routed. This is off now; while it is off the current policy applies (admins may reach everything).",
-  mt_off_steps: "After enabling: the app restarts (about 30 s), your current devices go into the Private domain, and nothing changes in access until you press Activate.",
+  mt_off_steps: "After enabling: the app restarts (about 30 s), your current devices go into the Home domain (you can rename it), and nothing changes in access until you press Activate.",
   mt_enable: "Enable access control", mt_enabling: "Enabling… the app restarts.",
-  mt_via: "Reachable via", mt_via_site: "Location (Edgebox)", mt_via_node: "Through a VPN device (router)",
+  mt_via: "Reachable via", mt_via_site: "Location (gateway)", mt_via_node: "Through a VPN device (router)",
   mt_access_btn: "Access", mt_node_groups: "Member of groups", mt_no_groups: "No groups yet. Create one under Groups and ports.",
   mt_behind: "Devices behind this device (routing)",
   mt_behind_intro: "Addresses in the network behind this device. Only when you open a port to one does the app approve exactly that address (/32) as a route; the rest of that network stays unreachable.",
@@ -147,7 +151,7 @@ Object.assign(STRINGS.en, {
   mt_give_access: "Give access", mt_add_access: "Add access",
   mt_devices_all: "Devices at locations and behind routers",
   mt_add_behind: "Add an address behind this device", mt_used_in: "Open through:",
-  mt_role: "Type", role_server: "Server", role_workstation: "Workstation", role_mobile: "Phone/tablet", role_router: "Router (Home Assistant)", role_edgebox: "Edgebox", role_auto: "Automatic ({x})",
+  mt_role: "Type", role_server: "Server", role_workstation: "Workstation", role_mobile: "Phone/tablet", role_router: "Router (Home Assistant)", role_gateway: "Gateway", role_auto: "Automatic ({x})",
   mt_role_hint: "Servers are the usual destinations. A workstation is usually only a destination for remote desktop, VNC or file sharing; a phone never.",
   mt_network: "Network", mt_move: "Move",
   mt_move_hint: "Moves the device to another network: that user becomes its owner, its name and IP address stay. Headscale restarts for a few seconds; nothing needs to be done on the device.",
@@ -180,13 +184,13 @@ const mtNode = (id) => mtData.nodes.find((n) => String(n.id) === String(id));
 const userDomain = (u) => mtData.model.domains.find((d) => d.users.includes(u));
 
 const ICON = { user: "👤", domain: "🏢", node: "💻", group: "👥", dev: "📡", loc: "📍", edge: "🛰" };
-const ROLE_ICON = { server: "🗄", workstation: "💻", mobile: "📱", router: "🏠", edgebox: "🛰" };
+const ROLE_ICON = { server: "🗄", workstation: "💻", mobile: "📱", router: "🏠", gateway: "🛰" };
 const nodeIcon = (n) => ROLE_ICON[(n || {}).role] || ICON.node;
 
 function refLabel(ref, side = "dst") {
   const [kind, key] = ref.split(/:(.*)/s);
   switch (kind) {
-    case "user": { const d = userDomain(key); return `${key}${d ? ` · ${d.name}` : ""}`; }
+    case "user": { const d = userDomain(key); return d ? fmt("ref_user_of", { x: d.name }) : key; }
     case "domain": return fmt(side === "src" ? "ref_domain_src" : "ref_domain_dst", { x: (mtDomain(key) || { name: key }).name });
     case "node": { const n = mtNode(key); return n ? n.name : `#${key}`; }
     case "group": return (mtGroup(key) || { name: key }).name;
@@ -233,7 +237,7 @@ function refOptions(mode) {
     const nodeOpt = (n, suffix = "") => ({ value: `node:${n.id}`, label: `${nodeIcon(n)} ${n.name} (${n.ipv4})${suffix}` });
     const ofRole = (...roles) => nodesOf(d).filter((n) => roles.includes(n.role));
     const all = [{ value: `domain:${d.id}`, label: `${ICON.domain} ${fmt(mode === "src" ? "ref_domain_src" : "ref_domain_dst", { x: d.name })}` }];
-    const users = d.users.map((u) => ({ value: `user:${u}`, label: `${ICON.user} ${u}` }));
+    const users = d.users.map((u) => ({ value: `user:${u}`, label: `${ICON.user} ${fmt("ref_user_of", { x: d.name })}` }));
     if (mode === "src") {
       // People first: they start connections. Servers can be a source too (e.g. backups).
       opts.push(...all, ...users, ...ofRole("workstation", "mobile").map((n) => nodeOpt(n)), ...ofRole("server", "router").map((n) => nodeOpt(n)));
@@ -675,7 +679,7 @@ async function openNodeAccess(nodeId) {
     const info = el("p", { class: "muted" }, [n.domain ? (mtDomain(n.domain) || {}).name : t("mt_unassigned"),
       n.ipv4, n.online ? t("online") : t("offline"), n.tags.join(", ") || n.user].filter(Boolean).join(" · "));
     let roleBox = "";
-    if (!["router", "edgebox"].includes(n.role)) {
+    if (!["router", "gateway"].includes(n.role)) {
       const tagged = n.tags.some((x) => x.endsWith("-server"));
       const sel = selectEl([
         { value: "auto", label: fmt("role_auto", { x: t(`role_${n.role}`) }) },
@@ -694,7 +698,7 @@ async function openNodeAccess(nodeId) {
     }
     // move to another network (new owner, or the other network's server tag)
     let moveBox = "";
-    if (!["router", "edgebox"].includes(n.role)) {
+    if (!["router", "gateway"].includes(n.role)) {
       const isServer = n.tags.some((x) => x.endsWith("-server"));
       const others = n.tags.length && !isServer ? [] : mtData.model.domains.flatMap((d) => (isServer
         ? [{ value: `${d.id}|`, label: d.name }]
@@ -810,15 +814,13 @@ function editDomain(d) {
   const name = mtIn({ value: d ? d.name : "", required: "" });
   const kind = selectEl(["domain", "cluster"].map((k) => ({ value: k, label: t(`kind_${k}`) })), d ? d.kind : "cluster",
     d && d.home ? { disabled: "" } : {});
-  const users = mtIn({ value: d ? d.users.join(", ") : "" });
   const hint = el("p", { class: "muted small" });
   const setHint = () => { hint.textContent = t(`kind_hint_${kind.value}`); };
   kind.addEventListener("change", setHint);
   setHint();
   openDialog(isNew ? t("mt_domains") : d.name, el("div", { class: "form-grid" },
-    mtField("ID", id), mtField(t("mt_name"), name), mtField(t("mt_kind"), kind),
-    mtField(t("mt_users"), users, t("mt_users_hint")), hint), {
-    onSave: () => mtSave("domain", isNew ? "create" : "update", { id: id.value, name: name.value, kind: kind.value, users: users.value }),
+    mtField("ID", id, t("mt_id_hint")), mtField(t("mt_name"), name, t("mt_name_hint")), mtField(t("mt_kind"), kind), hint), {
+    onSave: () => mtSave("domain", isNew ? "create" : "update", { id: id.value, name: name.value, kind: kind.value }),
     onDelete: isNew || d.home ? null : () => mtSave("domain", "delete", { id: d.id }),
   });
 }
@@ -829,12 +831,12 @@ function mtDomainsView() {
     mtTable([t("mt_name"), t("mt_kind"), t("mt_users"), t("mt_internal_policy"), ""], mtData.model.domains.map((d) => el("tr", { class: "clickable", onclick: () => editDomain(d) },
       el("td", {}, el("strong", {}, d.name), el("div", { class: "muted small mono" }, d.id), d.home ? el("div", { class: "muted small" }, "🏠 Home Assistant") : ""),
       el("td", {}, t(`kind_${d.kind}`)),
-      el("td", {}, el("div", { class: "chips" }, d.users.map((u) => chip(u, { kind: "user" })))),
+      el("td", {}, el("div", { class: "chips" }, d.users.map((u) => chip(u, { kind: "user", title: d.name })))),
       el("td", { class: "small" }, t(`internal_${d.internal}`)),
       el("td", { class: "actions" }, editBtn((e) => { e.stopPropagation(); editDomain(d); }))))));
 
   const who = el("select", {}, ...mtData.model.domains.map((d) => el("optgroup", { label: d.name },
-    ...d.users.map((u) => el("option", { value: `${d.id}|${u}` }, `👤 ${u}`)),
+    ...d.users.map((u) => el("option", { value: `${d.id}|${u}` }, fmt("mt_owner_device", { x: d.name }))),
     el("option", { value: `${d.id}|__server__` }, fmt("mt_server_of", { x: d.name })))));
   const hours = mtIn({ type: "number", min: "1", max: "168", value: "1" });
   const out = el("div");

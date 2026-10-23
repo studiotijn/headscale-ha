@@ -6,18 +6,19 @@ truth for the ACL policy in that mode (see policygen.py). It is stored in
 
 Terms
 -----
-domain      A network (kind ``domain`` or ``cluster``). Its user-owned devices belong to the
-            Headscale users listed in ``users``; its servers carry ``tag:<domain>-server``.
+domain      A network (kind ``domain`` or ``cluster``). Its personal devices belong to one
+            Headscale user with the network's ID as name and its name as display name (what
+            Tailscale clients show); its servers carry ``tag:<domain>-server``.
             - kind domain: everything inside is connected (users, servers, locations).
             - kind cluster: nothing inside is connected by default; only connections allow
               traffic, also between members of the same cluster.
             Members of either kind can be a source of connections to other networks.
-location    A site with an Edgebox (``tag:<domain>-<location>-edge``). All sites may use
-            the same local subnet (e.g. 192.168.1.0/24); the Edgebox maps it 1:1 onto a unique
+location    A site with a gateway (``tag:<domain>-<location>-edge``). All sites may use
+            the same local subnet (e.g. 192.168.1.0/24); the gateway maps it 1:1 onto a unique
             VPN subnet (10.81.<n>.0/24), so local host .y is reachable as 10.81.<n>.y.
 device      A named host behind a location (local IP; the VPN IP follows from the mapping).
 connection  An explicitly allowed flow: source (a node or all users of a domain) to a
-            destination (node, LAN device, whole location subnet or the Edgebox itself) on
+            destination (node, LAN device, whole location subnet or the gateway itself) on
             given ports. Everything else is denied.
 """
 
@@ -62,8 +63,9 @@ class ModelError(ValueError):
 def default_model(admin_user: str) -> dict:
     """Starting point when multi-tenant mode is switched on for the first time.
 
-    The existing devices all belong to ``admin_user``, so that user becomes the
-    Private domain and nothing has to be re-registered.
+    The existing devices all belong to ``admin_user``, so that user becomes the home
+    domain and nothing has to be re-registered (the user is renamed to the domain's ID
+    once the model is activated).
     """
     return {
         "schema": SCHEMA,
@@ -71,15 +73,13 @@ def default_model(admin_user: str) -> dict:
         "activated": False,
         "domains": [
             {
-                "id": "private",
-                "name": "Private",
+                "id": "home",
+                "name": "Home",
                 "kind": "domain",
                 "users": [admin_user],
                 "internal": "full",
                 "home": True,
             },
-            {"id": "work", "name": "Work", "kind": "domain", "users": [], "internal": "full", "home": False},
-            {"id": "project", "name": "Project", "kind": "cluster", "users": [], "internal": "none", "home": False},
         ],
         "locations": [],
         "devices": [],
@@ -127,6 +127,33 @@ def load(admin_user: str) -> dict:
     for c in model["connections"]:  # 0.7.0 stored one source and one destination as strings
         c["src"], c["dst"] = as_list(c.get("src")), as_list(c.get("dst"))
     return model
+
+
+def user_for(d: dict) -> str:
+    """The one Headscale user of a network: its ID."""
+    return d["id"]
+
+
+def rename_user_refs(model: dict, old: str, new: str) -> bool:
+    """Point every user:<old> reference (connections, group members) at user:<new>."""
+    changed = False
+
+    def fix(refs: list[str]) -> list[str]:
+        nonlocal changed
+        out: list[str] = []
+        for r in refs:
+            if r == f"user:{old}":
+                r = f"user:{new}"
+                changed = True
+            if r not in out:
+                out.append(r)
+        return out
+
+    for c in model["connections"]:
+        c["src"], c["dst"] = fix(as_list(c["src"])), fix(as_list(c["dst"]))
+    for g in model.get("groups", []):
+        g["members"] = fix(g.get("members", []))
+    return changed
 
 
 def save(model: dict) -> None:
@@ -251,7 +278,7 @@ def node_user(node: dict) -> str | None:
 
 
 def node_domain(model: dict, node: dict) -> str | None:
-    """Domain a node belongs to: tags first (servers, Edgeboxes, home router), then its user."""
+    """Domain a node belongs to: tags first (servers, gateways, home router), then its user."""
     tags = node_tags(node)
     if "tag:homerouter" in tags:
         home = home_domain(model)
@@ -275,12 +302,12 @@ _MOBILE_NAME = re.compile(r"iphone|ipad|android|pixel|galaxy|phone|tablet|ipod|s
 
 
 def node_role(model: dict, node: dict) -> str:
-    """server / workstation / mobile, or router / edgebox for the app's own routers."""
+    """server / workstation / mobile, or router / gateway for the app's own routers."""
     tags = node_tags(node)
     if "tag:homerouter" in tags:
         return "router"
     if node_location(model, node):
-        return "edgebox"
+        return "gateway"
     if any(tag.endswith("-server") for tag in tags):
         return "server"
     chosen = model.get("node_roles", {}).get(str(node["id"]))
@@ -547,7 +574,7 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
         if nodes_by_id and node is None:
             warnings.append(f"Device {dev['name']}: the device it is reached through no longer exists")
         elif node is not None and node_location(model, node):
-            raise ModelError(f"Device {dev['name']}: behind an Edgebox, add it to that location instead")
+            raise ModelError(f"Device {dev['name']}: behind a gateway, add it to that location instead")
     seen = set()
     for dev in model["devices"]:
         key = (dev.get("location") or f"via{dev.get('via')}", dev["ip"])
@@ -585,7 +612,7 @@ def check_connection(model: dict, c: dict, nodes_by_id: dict[int, dict], warning
         raise ModelError(f"Connection {name}: choose at least one destination")
     for ref in srcs:
         if ref.partition(":")[0] not in SRC_KINDS:
-            raise ModelError(f"Connection {name}: a site, device at a site or Edgebox can never be a source")
+            raise ModelError(f"Connection {name}: a site, device at a site or gateway can never be a source")
     for ref in dsts:
         if ref.partition(":")[0] not in DST_KINDS:
             raise ModelError(f"Connection {name}: unknown destination {ref}")
@@ -599,12 +626,12 @@ def check_connection(model: dict, c: dict, nodes_by_id: dict[int, dict], warning
         kind, _, key = ref.partition(":")
         if kind not in ("user", "domain", "node"):
             raise ModelError(
-                f"Connection {name}: the group used as source contains a site, device at a site or Edgebox; "
+                f"Connection {name}: the group used as source contains a site, device at a site or gateway; "
                 "those can never start connections"
             )
         node = nodes_by_id.get(int(key)) if kind == "node" and key.isdigit() else None
         if node is not None and node_location(model, node):
-            raise ModelError(f"Connection {name}: an Edgebox can never be a source")
+            raise ModelError(f"Connection {name}: a gateway can never be a source")
     normalize_ports(model, c.get("ports"))
     for ref in expand_refs(model, dsts):
         kind, _, key = ref.partition(":")
@@ -807,20 +834,19 @@ def _slug(text: str) -> str:
 
 def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
     if kind == "domain":
-        users = data.get("users", [])
-        if isinstance(users, str):
-            users = [u for u in re.split(r"[,\s]+", users) if u]
         obj = {
             "id": _text(data, "id").lower(),
             "name": _text(data, "name") or _text(data, "id"),
             "kind": normalize_kind(_text(data, "kind", "cluster")),
-            "users": sorted({str(u).strip().lower() for u in users}),
+            # One user per network, named after it; the app keeps Headscale in line.
+            "users": [_text(data, "id").lower()],
             "home": bool(data.get("home", False)),
         }
         obj["internal"] = INTERNAL_FOR[obj["kind"]]
         if not creating:
             current = domain(m, obj["id"]) or {}
             obj["home"] = current.get("home", False)  # only the migration sets the home domain
+            obj["users"] = current.get("users", obj["users"])  # renamed by the app, not here
         return obj
     if kind == "location":
         number = int(data.get("number") or 0)

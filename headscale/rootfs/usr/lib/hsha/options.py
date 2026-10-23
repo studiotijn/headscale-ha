@@ -19,7 +19,7 @@ DEFAULTS = {
     "tailscale_derp_fallback": True,
     "base_domain": "tailnet.home",
     "nameservers": ["1.1.1.1", "9.9.9.9"],
-    "admin_user": "admin",
+    "admin_user": "home",
     "node_expiry_days": 180,
     "subnet_router": True,
     "advertise_routes": [],
