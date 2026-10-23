@@ -270,7 +270,26 @@ async function loadNodes() {
     body.replaceChildren(el("tr", {}, el("td", { colspan: "6", class: "muted" }, t("no_devices"))));
     return;
   }
-  body.replaceChildren(...nodes.map((n) => {
+  // Group per network (multi-tenant mode) or per Headscale user / tag.
+  let groups = null;
+  if (typeof mtOn !== "undefined" && mtOn && typeof nodeGroups === "function") {
+    try {
+      const tn = await api("tenancy");
+      const meta = Object.fromEntries(tn.nodes.map((x) => [x.id, x]));
+      groups = nodeGroups(nodes.map((n) => ({ ...n, domain: (meta[n.id] || {}).domain, location: (meta[n.id] || {}).location })), tn.model);
+    } catch { groups = null; }
+  }
+  if (!groups) {
+    const by = new Map();
+    for (const n of [...nodes].sort((a, b) => a.name.localeCompare(b.name))) {
+      const key = n.tags.length ? n.tags.join(", ") : (n.user || "");
+      if (!by.has(key)) by.set(key, { name: key, nodes: [] });
+      by.get(key).nodes.push(n);
+    }
+    groups = [...by.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const header = (g) => el("tr", { class: "group-row" }, el("td", { colspan: "6" }, el("strong", {}, g.name), el("span", { class: "muted" }, ` · ${g.nodes.length}`)));
+  body.replaceChildren(...groups.flatMap((g) => [header(g), ...g.nodes.map((n) => {
     const pending = n.available_routes.filter((r) => !n.approved_routes.includes(r));
     const actions = el("td", { class: "actions" });
     if (pending.length) actions.append(el("button", { class: "btn small", onclick: () => nodeAction(n.id, "approve") }, t("approve_routes")));
@@ -289,7 +308,7 @@ async function loadNodes() {
       el("td", { class: "mono" }, n.approved_routes.join("\n"), pending.length ? el("div", { class: "warn-text" }, `+ ${pending.join(", ")}`) : ""),
       actions,
     );
-  }));
+  })]));
 }
 
 let tailnetDomain = "";

@@ -490,12 +490,20 @@ function mtAccessView() {
   const sel = el("select", {}, el("option", { value: "" }, t("mt_subject")),
     ...[...refOptions("dst"), ...refOptions("src").filter((g) => g.group === t("grp_groups"))].map((g) =>
       el("optgroup", { label: g.group }, ...g.options.map((o) => el("option", { value: o.value }, o.label)))));
-  sel.value = mtAccessRef;
   const out = el("div", { class: "access" });
+  const map = networkMap((ref) => { pick(ref); });
+  function pick(ref) {
+    if (ref && ![...sel.options].some((o) => o.value === ref)) sel.append(el("option", { value: ref }, refLabel(ref, "src")));
+    sel.value = ref;
+    show().catch((e) => banner(e.message));
+    if (ref) out.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  sel.value = mtAccessRef;
   const show = async () => {
     mtAccessRef = sel.value;
-    if (!sel.value) { out.replaceChildren(); return; }
+    if (!sel.value) { out.replaceChildren(); map.highlight("", []); return; }
     const r = await api(`tenancy/access?ref=${encodeURIComponent(sel.value)}`);
+    map.highlight(sel.value, [...r.outgoing, ...r.incoming].map((x) => x.id));
     const conns = Object.fromEntries(mtData.model.connections.map((c) => [c.id, c]));
     const rows = (items, side) => (items.length ? items.map((x) => el("div", { class: `conn${x.enabled ? "" : " off"}`, onclick: () => editConnection(conns[x.id]) },
       el("div", { class: "conn-head" }, el("strong", {}, x.name || x.id), el("span", { class: "grow" }), editBtn((e) => { e.stopPropagation(); editConnection(conns[x.id]); })),
@@ -511,8 +519,8 @@ function mtAccessView() {
           el("button", { class: "btn secondary small", type: "button", onclick: () => editConnection(null, { dst: [sel.value] }) }, `+ ${t("mt_new_to")}`))));
   };
   sel.addEventListener("change", () => show().catch((e) => banner(e.message)));
-  card.append(el("div", { class: "row" }, sel), out);
-  if (mtAccessRef) show().catch(() => {});
+  card.append(el("h3", {}, t("ng_title")), el("p", { class: "muted small" }, t("ng_hint")), map.el, el("div", { class: "row" }, sel), out);
+  if (mtAccessRef) pick(mtAccessRef);
   return [card];
 }
 
@@ -834,7 +842,7 @@ function mtDomainsView() {
     } catch (err) { banner(err.message); } finally { busy(regBtn, false); }
   });
   const nodeCard = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
-    mtTable([t("name"), t("mt_role"), t("mt_domain"), "IP", t("status"), t("routes"), ""], mtData.nodes.map((n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
+    mtTable([t("name"), t("mt_role"), t("mt_domain"), "IP", t("status"), t("routes"), ""], groupNodeRows(mtData.nodes, 7, (n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
       el("td", {}, el("strong", {}, n.name), el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))),
       el("td", { class: "nowrap" }, `${nodeIcon(n)} ${t(`role_${n.role}`)}`),
       el("td", {}, n.domain ? (mtDomain(n.domain) || {}).name + (n.location ? ` · ${(mtLoc(n.location) || {}).name}` : "") : el("span", { class: "warn-text" }, t("mt_unassigned"))),
@@ -858,6 +866,36 @@ async function mtLogView() {
     mtTable(["", "", ""], r.entries.slice(0, 100).map((e) => el("tr", {},
       el("td", { class: "small nowrap" }, new Date(e.ts * 1000).toLocaleString(LANG)),
       el("td", { class: "small" }, e.actor), el("td", {}, `${e.action}: ${e.summary}`)))))];
+}
+
+// ---------------------------------------------------------------- devices per network
+// Rows grouped under a header per network (model order), then per location; unassigned last.
+function nodeGroups(nodes, model) {
+  const doms = model.domains;
+  const order = Object.fromEntries(doms.map((d, i) => [d.id, i]));
+  const locName = (id) => ((model.locations || []).find((l) => l.id === id) || {}).name || "";
+  const sorted = [...nodes].sort((a, b) => ((order[a.domain] ?? 1e6) - (order[b.domain] ?? 1e6))
+    || locName(a.location).localeCompare(locName(b.location)) || a.name.localeCompare(b.name));
+  const groups = [];
+  for (const n of sorted) {
+    const key = n.domain || "";
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) {
+      const d = doms.find((x) => x.id === key);
+      g = { key, name: d ? d.name : t("mt_unassigned"), nodes: [] };
+      groups.push(g);
+    }
+    g.nodes.push(n);
+  }
+  return groups;
+}
+
+function groupHeader(name, count, cols) {
+  return el("tr", { class: "group-row" }, el("td", { colspan: String(cols) }, el("strong", {}, name), el("span", { class: "muted" }, ` · ${count}`)));
+}
+
+function groupNodeRows(nodes, cols, row) {
+  return nodeGroups(nodes, mtData.model).flatMap((g) => [groupHeader(g.name, g.nodes.length, cols), ...g.nodes.map(row)]);
 }
 
 // ---------------------------------------------------------------- page

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0
+
+- **Network map** in *Networks → Who may reach what?*: every network is a circle with its users,
+  devices and locations inside (locations as smaller circles with their Edgebox and equipment).
+  Connections are arrows from the side that starts the connection to the destination; disabled
+  connections are dashed. Click a network, location, user or device to see its access below the
+  map; the arrows involved are highlighted.
+- **Device lists grouped per network** (Devices tab and *Networks and devices*), sorted by
+  location and name. Without networks, devices are grouped per Headscale user or tag.
+
 ## 0.12.3
 
 - **Rename devices.** *Devices → Rename* changes the name a device has in the tailnet (and its
