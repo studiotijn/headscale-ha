@@ -125,8 +125,6 @@ def test_overlapping_vpn_subnets_rejected():
 @pytest.mark.parametrize(
     ("src", "dst", "message"),
     [
-        ("domain:project", "node:1", "can never start connections"),
-        ("node:5", "node:4", "can never start connections"),
         ("node:6", "dev:cam1", "Edgebox can never be a source"),
         ("dev:cam1", "node:1", "can never be a source"),
     ],
@@ -161,8 +159,8 @@ def test_policy_is_deterministic_and_closed():
     assert a["sha256"] == b["sha256"] and a["text"] == b["text"]
     pol = a["policy"]
     srcs = {s for g in pol["grants"] for s in g["src"]}
-    # Nothing at a client site is ever a source.
-    assert not any(s.startswith(("tag:project", "loc-", "dev-")) for s in srcs)
+    # Nothing at a site (Edgebox, site subnet, device behind it) is ever a source.
+    assert not any(s.endswith("-edge") or s.startswith(("loc-", "dev-")) for s in srcs)
     assert "node-6" not in srcs and "node-7" not in srcs
     # No wildcard rules.
     assert all("*" not in g["src"] and "*" not in g["dst"] for g in pol["grants"])
@@ -312,11 +310,10 @@ def test_groups_users_and_profiles():
     bad, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "g2g"), "src": ["group:cams"]})
     with pytest.raises(tn.ModelError, match="never start"):
         tn.validate(bad, NODES)
-    # A group mixing a client user with Private, towards Private: refused.
+    # A group mixing a cluster user with Private, towards Private: allowed (explicit connection).
     m2, _ = tn.apply_change(m, "group", "create", {"id": "mix", "name": "Mix", "members": ["user:anna", "node:1"]})
-    bad, _ = tn.apply_change(m2, "connection", "create", {"src": "group:mix", "dst": "node:2", "ports": "*"})
-    with pytest.raises(tn.ModelError, match="project domain"):
-        tn.validate(bad, NODES)
+    ok, _ = tn.apply_change(m2, "connection", "create", {"src": "group:mix", "dst": "node:2", "ports": "*"})
+    tn.validate(ok, NODES)
 
 
 def tn_conn(m, cid):
@@ -389,10 +386,9 @@ def test_device_behind_a_router_gets_only_its_route():
     # switching the connection off withdraws the route again
     m, _ = tn.apply_change(m, "connection", "update", {**tn_conn(m, "p"), "enabled": False})
     assert tn.allowed_routes(m, werk, []) == []
-    # a client user can never reach it (other domain)
-    bad, _ = tn.apply_change(m, "connection", "create", {"src": "user:anna", "dst": "dev:prn", "ports": "*"})
-    with pytest.raises(tn.ModelError, match="project domain"):
-        tn.validate(bad, NODES)
+    # a cluster user may reach it, but only through an explicit connection
+    ok, _ = tn.apply_change(m, "connection", "create", {"src": "user:anna", "dst": "dev:prn", "ports": "*"})
+    tn.validate(ok, NODES)
     # not behind an Edgebox, not a tailnet address, not both location and router
     for data, msg in (
         ({"via": "node:6", "ip": "10.1.1.1"}, "Edgebox"),
@@ -445,9 +441,9 @@ def test_legacy_client_kind_is_migrated(tmp_path, monkeypatch):
     m = build()
     m["domains"][2]["kind"] = "client"
     tn.save(m)
-    assert tn.load("admin")["domains"][2]["kind"] == "project"
+    assert tn.load("admin")["domains"][2]["kind"] == "cluster"
     m2, _ = tn.apply_change(m, "domain", "create", {"id": "acme", "name": "ACME", "kind": "client"})
-    assert tn.domain(m2, "acme")["kind"] == "project"
+    assert tn.domain(m2, "acme")["kind"] == "cluster"
 
 
 def test_device_types():
@@ -477,3 +473,41 @@ def test_device_types():
     phone, _ = tn.apply_change(m, "connection", "create", {"src": "node:4", "dst": "node:2", "ports": "profile:ssh"})
     assert [w for w in tn.validate(phone, NODES) if "phone" in w]
     assert by_id
+
+
+def test_domain_and_cluster_kinds(tmp_path, monkeypatch):
+    m = build()
+    assert [d["kind"] for d in m["domains"]] == ["domain", "domain", "cluster"]
+    assert [d["internal"] for d in m["domains"]] == ["full", "full", "none"]
+    # The kind decides the internal policy; a separate value is ignored.
+    data = {"id": "acme", "name": "ACME", "kind": "cluster", "internal": "full"}
+    m2, _ = tn.apply_change(m, "domain", "create", data)
+    assert tn.domain(m2, "acme")["internal"] == "none"
+    # Old kinds are converted on load.
+    from hsha import paths
+
+    monkeypatch.setattr(paths, "TENANCY", tmp_path / "t.json")
+    old = json.loads(json.dumps(m))
+    for d, k in zip(old["domains"], ("private", "work", "project"), strict=True):
+        d["kind"], d["internal"] = k, "none"
+    tn.save(old)
+    loaded = tn.load("admin")
+    assert [(d["kind"], d["internal"]) for d in loaded["domains"]] == [
+        ("domain", "full"),
+        ("domain", "full"),
+        ("cluster", "none"),
+    ]
+
+
+def test_cluster_may_start_connections_and_is_closed_inside():
+    m = build(**{})
+    # A cluster user and the whole cluster may reach individual devices or a whole domain elsewhere.
+    for src, dst in (("node:5", "node:4"), ("domain:project", "node:1"), ("user:anna", "domain:work")):
+        ok, _ = tn.apply_change(m, "connection", "create", {"src": src, "dst": dst, "ports": "tcp:22"})
+        tn.validate(ok, NODES)
+    r = pg.generate(ok, ctx())
+    assert any(g["src"] == ["anna@"] and "group:dom-work" in g["dst"] for g in r["policy"]["grants"])
+    # Domains: users and servers reach everything inside; clusters get no internal grant.
+    internal = {g["#name"]: g for g in r["policy"]["grants"] if g["#name"].endswith(": internal")}
+    assert set(internal) == {"Private: internal", "Work: internal"}
+    assert "tag:work-server" in internal["Work: internal"]["src"]

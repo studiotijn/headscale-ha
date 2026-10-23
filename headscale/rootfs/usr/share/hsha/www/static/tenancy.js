@@ -5,7 +5,7 @@
 Object.assign(STRINGS.nl, {
   tab_networks: "Netwerken",
   mt_title: "Netwerken en toegang",
-  mt_intro: "Elk netwerk (privé, werk, project) is gescheiden. Alleen de verbindingen die je hier maakt zijn toegestaan; antwoorden komen terug, nieuwe verbindingen de andere kant op niet. Wijzigingen gaan live na Toepassen. Headscale controleert eerst de ingebouwde tests.",
+  mt_intro: "Elk netwerk (domein of cluster) is gescheiden van de andere. Binnen een domein is alles verbonden; binnen een cluster niets. Tussen netwerken, en binnen een cluster, zijn alleen de verbindingen toegestaan die je hier maakt; antwoorden komen terug, nieuwe verbindingen de andere kant op niet. Wijzigingen gaan live na Toepassen. Headscale controleert eerst de ingebouwde tests.",
   mt_state_off: "Nog niet geactiveerd: het huidige beleid is nog actief",
   mt_state_ok: "Actief", mt_state_pending: "Wijzigingen nog niet toegepast", mt_state_drift: "Beleid is buiten de app gewijzigd (bv. in Headplane)",
   mt_applied: "Toegepast: revisie {rev}, {tests} tests, {when} door {by}",
@@ -23,7 +23,7 @@ Object.assign(STRINGS.nl, {
   mt_add: "+ toevoegen…", mt_all_ports: "Alle poorten", mt_custom_port: "Eigen poort, bv. tcp:8010 of udp:2368", mt_add_port: "Toevoegen",
   mt_sentence: "{from} mag naar {to} op {ports}.",
   mt_check_ok_short: "Klopt.", mt_checking: "Controleren…",
-  ref_user: "{x}", ref_domain_src: "Alle gebruikers van {x}", ref_domain_dst: "Alle apparaten van {x}",
+  ref_user: "{x}", ref_domain_src: "Alle gebruikers en servers van {x}", ref_domain_dst: "Alles van {x}",
   ref_loc: "{x}: hele locatie", ref_edge: "{x}: Edgebox zelf",
   grp_people: "Gebruikers", grp_devices: "Apparaten", grp_groups: "Groepen",
   mt_access_intro: "Kies een gebruiker, apparaat, groep of locatie en zie wat die mag bereiken en door wie die bereikbaar is.",
@@ -40,9 +40,11 @@ Object.assign(STRINGS.nl, {
   mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet de Edgebox op de router van de locatie in een eigen firewallzone.",
   mt_devices: "Apparaten op locaties", mt_local_ip: "Lokaal IP", mt_vpn_ip: "VPN-IP", mt_location: "Locatie",
   mt_domains: "Netwerken", mt_kind: "Soort", mt_users: "Gebruikers", mt_internal_policy: "Intern beleid",
-  kind_private: "privé", kind_work: "werk", kind_project: "project",
-  internal_full: "leden bereiken alles binnen het netwerk", internal_none: "alleen expliciete verbindingen",
-  mt_users_hint: "Headscale-gebruikers, met komma's. Bij een project: één gebruiker per persoon.",
+  kind_domain: "domein", kind_cluster: "cluster",
+  internal_full: "alles binnen het domein is onderling verbonden", internal_none: "standaard geen verbindingen, ook niet onderling",
+  kind_hint_domain: "Domein: alle gebruikers, servers en locaties binnen het domein bereiken elkaar volledig.",
+  kind_hint_cluster: "Cluster: apparaten binnen het cluster bereiken elkaar standaard niet. Gebruikers en apparaten ervan krijgen alleen toegang via verbindingen, naar losse apparaten of naar alles van een ander cluster of domein.",
+  mt_users_hint: "Headscale-gebruikers, met komma's. Bij een cluster: één gebruiker per persoon.",
   mt_nodes: "Apparaten in het VPN", mt_unassigned: "zonder netwerk (geen toegang)",
   mt_add_device: "Apparaat aanmelden", mt_user: "Gebruiker",
   mt_audit: "Logboek", mt_none_yet: "Nog niets.", mt_route_warn: "Routecontrole",
@@ -80,7 +82,7 @@ Object.assign(STRINGS.nl, {
 Object.assign(STRINGS.en, {
   tab_networks: "Networks",
   mt_title: "Networks and access",
-  mt_intro: "Every network (private, work, project) is separated. Only the connections you make here are allowed; replies come back, new connections in the other direction do not. Changes go live when you press Apply. Headscale first runs the built-in tests.",
+  mt_intro: "Every network (domain or cluster) is separated from the others. Inside a domain everything is connected; inside a cluster nothing is. Between networks, and inside a cluster, only the connections you make here are allowed; replies come back, new connections in the other direction do not. Changes go live when you press Apply. Headscale first runs the built-in tests.",
   mt_state_off: "Not activated yet: the current policy is still in effect",
   mt_state_ok: "Active", mt_state_pending: "Changes not applied yet", mt_state_drift: "Policy was changed outside the app (e.g. in Headplane)",
   mt_applied: "Applied: revision {rev}, {tests} tests, {when} by {by}",
@@ -98,7 +100,7 @@ Object.assign(STRINGS.en, {
   mt_add: "+ add…", mt_all_ports: "All ports", mt_custom_port: "Own port, e.g. tcp:8010 or udp:2368", mt_add_port: "Add",
   mt_sentence: "{from} may reach {to} on {ports}.",
   mt_check_ok_short: "Looks right.", mt_checking: "Checking…",
-  ref_user: "{x}", ref_domain_src: "All users of {x}", ref_domain_dst: "All devices of {x}",
+  ref_user: "{x}", ref_domain_src: "All users and servers of {x}", ref_domain_dst: "Everything of {x}",
   ref_loc: "{x}: whole location", ref_edge: "{x}: the Edgebox itself",
   grp_people: "Users", grp_devices: "Devices", grp_groups: "Groups",
   mt_access_intro: "Pick a user, device, group or location and see what it may reach and who may reach it.",
@@ -115,9 +117,11 @@ Object.assign(STRINGS.en, {
   mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the Edgebox in its own firewall zone on the location's router.",
   mt_devices: "Devices at locations", mt_local_ip: "Local IP", mt_vpn_ip: "VPN IP", mt_location: "Location",
   mt_domains: "Networks", mt_kind: "Kind", mt_users: "Users", mt_internal_policy: "Internal policy",
-  kind_private: "private", kind_work: "work", kind_project: "project",
-  internal_full: "members reach everything in the network", internal_none: "explicit connections only",
-  mt_users_hint: "Headscale users, comma separated. For a project: one user per person.",
+  kind_domain: "domain", kind_cluster: "cluster",
+  internal_full: "everything in the domain is connected", internal_none: "no connections by default, not even inside",
+  kind_hint_domain: "Domain: all users, servers and locations inside the domain fully reach each other.",
+  kind_hint_cluster: "Cluster: devices inside the cluster don't reach each other by default. Its users and devices only get access through connections, to single devices or to everything of another cluster or domain.",
+  mt_users_hint: "Headscale users, comma separated. For a cluster: one user per person.",
   mt_nodes: "Devices in the VPN", mt_unassigned: "no network (no access)",
   mt_add_device: "Add a device", mt_user: "User",
   mt_audit: "Log", mt_none_yet: "Nothing yet.", mt_route_warn: "Route check",
@@ -218,7 +222,7 @@ function refOptions(mode) {
     const opts = [];
     const nodeOpt = (n, suffix = "") => ({ value: `node:${n.id}`, label: `${nodeIcon(n)} ${n.name} (${n.ipv4})${suffix}` });
     const ofRole = (...roles) => nodesOf(d).filter((n) => roles.includes(n.role));
-    const all = d.users.length ? [{ value: `domain:${d.id}`, label: `${ICON.domain} ${fmt(mode === "src" ? "ref_domain_src" : "ref_domain_dst", { x: d.name })}` }] : [];
+    const all = [{ value: `domain:${d.id}`, label: `${ICON.domain} ${fmt(mode === "src" ? "ref_domain_src" : "ref_domain_dst", { x: d.name })}` }];
     const users = d.users.map((u) => ({ value: `user:${u}`, label: `${ICON.user} ${u}` }));
     if (mode === "src") {
       // People first: they start connections. Servers can be a source too (e.g. backups).
@@ -579,7 +583,7 @@ function vpnFor(loc, ip) {
 
 function editLocation(l) {
   const isNew = !l;
-  const clients = mtData.model.domains.filter((d) => d.kind === "project").map((d) => ({ value: d.id, label: d.name }));
+  const clients = mtData.model.domains.map((d) => ({ value: d.id, label: `${d.name} (${t(`kind_${d.kind}`)})` }));
   const next = Math.max(0, ...mtData.model.locations.map((x) => x.number || 0)) + 1;
   const dom = selectEl(clients, l ? l.domain : undefined, isNew ? {} : { disabled: "" });
   const num = mtIn({ type: "number", min: "1", max: "254", value: String(l ? l.number : next), required: "" });
@@ -755,7 +759,7 @@ function mtSitesView() {
   const out = el("div");
   const locCard = el("article", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, t("mt_locations")),
-      mtData.model.domains.some((d) => d.kind === "project") ? el("button", { class: "btn", type: "button", onclick: () => editLocation(null) }, `+ ${t("mt_new")}`) : ""),
+      el("button", { class: "btn", type: "button", onclick: () => editLocation(null) }, `+ ${t("mt_new")}`)),
     el("p", { class: "muted" }, t("mt_loc_intro")),
     mtTable([t("mt_name"), `${t("mt_local")} → ${t("mt_vpn")}`, t("mt_edge"), ""], mtData.model.locations.map((l) => {
       const keyBtn = el("button", { class: "btn small", type: "button" }, t("mt_edge_key"));
@@ -794,13 +798,17 @@ function editDomain(d) {
   const isNew = !d;
   const id = mtIn({ value: d ? d.id : "", required: "", pattern: "[a-z][a-z0-9-]{0,19}", ...(isNew ? {} : { readonly: "" }) });
   const name = mtIn({ value: d ? d.name : "", required: "" });
-  const kind = selectEl(["private", "work", "project"].map((k) => ({ value: k, label: t(`kind_${k}`) })), d ? d.kind : "project");
+  const kind = selectEl(["domain", "cluster"].map((k) => ({ value: k, label: t(`kind_${k}`) })), d ? d.kind : "cluster",
+    d && d.home ? { disabled: "" } : {});
   const users = mtIn({ value: d ? d.users.join(", ") : "" });
-  const internal = selectEl(["full", "none"].map((k) => ({ value: k, label: t(`internal_${k}`) })), d ? d.internal : "none");
+  const hint = el("p", { class: "muted small" });
+  const setHint = () => { hint.textContent = t(`kind_hint_${kind.value}`); };
+  kind.addEventListener("change", setHint);
+  setHint();
   openDialog(isNew ? t("mt_domains") : d.name, el("div", { class: "form-grid" },
     mtField("ID", id), mtField(t("mt_name"), name), mtField(t("mt_kind"), kind),
-    mtField(t("mt_users"), users, t("mt_users_hint")), mtField(t("mt_internal_policy"), internal)), {
-    onSave: () => mtSave("domain", isNew ? "create" : "update", { id: id.value, name: name.value, kind: kind.value, users: users.value, internal: internal.value }),
+    mtField(t("mt_users"), users, t("mt_users_hint")), hint), {
+    onSave: () => mtSave("domain", isNew ? "create" : "update", { id: id.value, name: name.value, kind: kind.value, users: users.value }),
     onDelete: isNew || d.home ? null : () => mtSave("domain", "delete", { id: d.id }),
   });
 }

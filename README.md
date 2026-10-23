@@ -32,8 +32,9 @@ wizard tests every step, from DNS and port forwards to the certificate as your d
 - **Printers over the VPN**: discovery, a fixed name per printer in the tailnet and AirPrint
   for iPhone/iPad (DNS-SD or a profile).
 - **Home network assistants** for UniFi Protect, Prusa and Plex.
-- **Multi-tenant networks** (optional): separated networks for private, work and projects,
-  with a connections editor, port profiles and Edgeboxes for project sites.
+- **Multi-tenant networks** (optional): separated networks as *domains* (connected inside) or
+  *clusters* (closed inside), with a connections editor, a network map, port profiles and
+  Edgeboxes for sites.
 - **Backup support**: all data is under `/data` and included in Home Assistant backups.
 - **Pinned components**: every upstream part has a fixed version; the Headscale binary is
   checksum-verified.

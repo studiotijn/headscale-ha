@@ -143,18 +143,20 @@ def generate(model: dict, ctx: Context) -> dict:
 
     grants: list[dict] = []
 
-    # Internal policy per domain ("full": its members reach everything of their own domain).
+    # A domain is connected inside on every level: users and servers reach all of it.
+    # A cluster has no internal grant: only connections allow traffic, also inside it.
     for d in domains:
-        if d.get("internal") != "full" or not d.get("users"):
+        if d.get("internal") != "full":
             continue
-        dst = [_group(d["id"]), tn.server_tag(d["id"])]
+        members = ([_group(d["id"])] if d.get("users") else []) + [tn.server_tag(d["id"])]
+        dst = list(members)
         if d.get("home"):
             dst += ["tag:homerouter"] + [f"home-net-{i + 1}" for i in range(len(ctx.home_routes))]
         for loc in model["locations"]:
             if loc["domain"] == d["id"]:
                 dst += [_loc_alias(loc), tn.edge_tag(loc)]
-        grants.append({"#name": f"{d['name']}: internal", "src": [_group(d["id"])], "dst": dst, "ip": ["*"]})
-        if d.get("home") and ctx.exit_node:
+        grants.append({"#name": f"{d['name']}: internal", "src": members, "dst": dst, "ip": ["*"]})
+        if d.get("home") and ctx.exit_node and d.get("users"):
             grants.append(
                 {
                     "#name": f"{d['name']}: exit node",
@@ -195,7 +197,7 @@ def generate(model: dict, ctx: Context) -> dict:
         if not c.get("enabled", True):
             continue
         src = _endpoints(model, c["src"], node_ref, is_src=True)
-        dst = _endpoints(model, c["dst"], node_ref, is_src=False)
+        dst = _endpoints(model, c["dst"], node_ref, is_src=False, home_routes=ctx.home_routes)
         if not src or not dst:
             warnings.append(f"Connection {c.get('name') or c['id']} skipped: source or destination has no address")
             continue
@@ -222,25 +224,34 @@ def generate(model: dict, ctx: Context) -> dict:
     return {"text": text, "policy": policy, "sha256": sha, "tests": len(tests), "warnings": warnings}
 
 
-def _endpoints(model: dict, refs, node_ref, is_src: bool) -> list[str]:
+def _endpoints(model: dict, refs, node_ref, is_src: bool, home_routes: list[str] | None = None) -> list[str]:
     out: list[str] = []
     for ref in tn.expand_refs(model, refs):
-        for alias in _endpoint(model, ref, node_ref, is_src):
+        for alias in _endpoint(model, ref, node_ref, is_src, home_routes):
             if alias not in out:
                 out.append(alias)
     return out
 
 
-def _endpoint(model: dict, ref: str, node_ref, is_src: bool) -> list[str]:
+def _endpoint(model: dict, ref: str, node_ref, is_src: bool, home_routes: list[str] | None = None) -> list[str]:
     kind, _, key = ref.partition(":")
     if kind == "user":
         return [f"{key}@"] if tn.user_domain(model, key) else []
     if kind == "domain":
+        # Everything a network has: its users' devices and servers, and as a destination
+        # also its locations (Edgebox and site subnet) and, for the home network, the home LAN.
         d = tn.domain(model, key)
         if not d:
             return []
-        out = [_group(key)] if d.get("users") else []
-        return out if is_src else [*out, tn.server_tag(key)]
+        out = ([_group(key)] if d.get("users") else []) + [tn.server_tag(key)]
+        if is_src:
+            return out
+        for loc in model["locations"]:
+            if loc["domain"] == key:
+                out += [_loc_alias(loc), tn.edge_tag(loc)]
+        if d.get("home") and home_routes is not None:
+            out += ["tag:homerouter"] + [f"home-net-{i + 1}" for i in range(len(home_routes))]
+        return out
     if kind == "node":
         alias = node_ref(int(key))
         return [alias] if alias else []
@@ -314,7 +325,14 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
                 if deny:
                     tests.append({"src": src, "deny": sorted(set(deny))})
 
-    # 3. Every enabled connection with a concrete source and a single-host destination is reachable.
+    # 3. Inside a cluster: members don't reach each other unless a connection says so.
+    for d in model["domains"]:
+        if d.get("kind") != "cluster" or (d["id"], d["id"]) in connected or len(reps[d["id"]]) < 2:
+            continue
+        first, *others = reps[d["id"]]
+        tests.append({"src": first, "deny": sorted({f"{x}:{TEST_PORT}" for x in others})})
+
+    # 4. Every enabled connection with a concrete source and a single-host destination is reachable.
     for c in model["connections"]:
         if not c.get("enabled", True):
             continue

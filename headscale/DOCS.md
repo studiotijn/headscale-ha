@@ -166,26 +166,36 @@ device and its ports to every user of your tailnet. Admins always have access.
 
 ## Multi-tenant networks (optional)
 
-With the option `multi_tenant` (or *Networks → Enable access control*) one Headscale manages several **separated network domains**,
-for example *Private* (home), *Work* and a *Project* with several sites. These three are created
-when you enable it; rename them, change them or add more (e.g. one domain per customer).
+With the option `multi_tenant` (or *Networks → Enable access control*) one Headscale manages several
+**separated networks**. Each network is a **domain** or a **cluster**:
+
+| Kind | Inside the network | Towards other networks |
+| --- | --- | --- |
+| Domain | Everything is connected: users, servers and locations reach each other fully | Only through connections |
+| Cluster | Nothing is connected by default, not even devices of the same user | Only through connections |
+
+Users and devices of both kinds can be the source of a connection: to single devices, or to
+everything of another cluster or domain. Inside a cluster, connections are also the only way two
+of its devices reach each other. *Private* (home, domain), *Work* (domain) and *Project*
+(cluster) are created when you enable it; rename them, change them or add more.
 Off by default; with the option off nothing below changes.
 
-- **Domains.** A domain owns Headscale users (its people's laptops and phones) and tagged
+- **Networks.** A network owns Headscale users (its people's laptops and phones) and tagged
   servers (`tag:<domain>-server`). Your existing `admin_user` becomes the *Private* domain, so
-  existing devices keep working. Devices of different domains cannot reach each other.
-- **Locations** (project sites). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
+  existing devices keep working. Devices of different networks cannot reach each other. The home
+  network (this app's subnet router) is always a domain.
+- **Locations** (sites, in a domain or a cluster). Each site has a Linux **Edgebox** (`tag:<domain>-<location>-edge`)
   behind the local router. All sites may use the *same* local subnet (e.g. `192.168.1.0/24`, or
   the fixed default address of the equipment you install): the Edgebox maps it 1:1 onto a unique
   VPN subnet, so local `192.168.1.y` at location *n* is `10.81.n.y` over the VPN. Headscale
   has no 4via6, so this mapping is what makes identical sites possible.
 - **Connections.** Only explicit connections are allowed. In *Networks → Connections* you pick
-  *From* (users, devices, all users of a domain, or a group), *To* (users, devices, devices at a
-  site, a whole site, the Edgebox itself, or a group) and *Ports* (port profiles such as SSH or Web,
+  *From* (users, devices, all users and servers of a network, or a group), *To* (users, devices,
+  devices at a site, a whole site, the Edgebox itself, everything of a network, or a group) and *Ports* (port profiles such as SSH or Web,
   or your own: `tcp:8010`, `udp:2368`, `tcp:8000-8010`, `icmp`, *All ports*). Every connection can
   be edited in place, switched on/off or copied. The editor shows the effect as a sentence and
-  checks it while you type. Replies come back; nothing at a site can start a connection, and a
-  project domain can never be a source towards another domain (the app refuses such a connection).
+  checks it while you type. Replies come back; nothing at a site (Edgebox or equipment behind it) can
+  start a connection.
 - **Groups and port profiles.** Groups bundle users, devices or sites (group → group in one
   connection). A group with site devices can only be a destination. Port profiles are named port
   sets; changing one changes every connection that uses it.

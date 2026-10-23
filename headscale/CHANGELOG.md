@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.0
+
+- **Two kinds of network: domain and cluster** (replace private, work and project).
+  - **Domain:** everything inside is connected on every level: users, servers and locations.
+  - **Cluster:** nothing inside is connected by default, not even devices of the same user.
+  - The kind sets the internal policy; it is no longer a separate choice.
+  - Users and devices of a cluster can now be the source of connections: to single devices or to
+    everything of another cluster or domain (before, a project could never start a connection).
+  - Existing networks are converted: private and work become domains, project becomes a cluster.
+    Their access stays the same.
+- *Everything of a network* as a destination now also includes its servers, locations and, for the
+  home network, the home LAN. *All users and servers of a network* as a source includes its servers.
+- Locations can belong to a domain as well as a cluster.
+- The generated policy tests that devices inside a cluster can't reach each other.
+- The network map shows the kind next to each network.
+
 ## 0.13.1
 
 - **Fix: the panel could keep showing the previous version after an update.** The browser cached

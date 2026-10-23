@@ -5,12 +5,12 @@
 Object.assign(STRINGS.nl, {
   ng_title: "Netwerkkaart", ng_hint: "Klik op een netwerk, gebruiker of apparaat om de rechten te zien. Pijlen wijzen van wie de verbinding start naar de bestemming.",
   ng_unassigned: "Niet ingedeeld", ng_legend_on: "verbinding", ng_legend_off: "uitgeschakeld", ng_empty: "Nog geen netwerken.",
-  ng_reset: "Alles tonen", ng_internal: "intern volledig open",
+  ng_reset: "Alles tonen", ng_internal: "domein · alles verbonden", ng_cluster: "cluster · intern dicht",
 });
 Object.assign(STRINGS.en, {
   ng_title: "Network map", ng_hint: "Click a network, user or device to see its access. Arrows point from who starts the connection to the destination.",
   ng_unassigned: "Not assigned", ng_legend_on: "connection", ng_legend_off: "disabled", ng_empty: "No networks yet.",
-  ng_reset: "Show all", ng_internal: "fully open inside",
+  ng_reset: "Show all", ng_internal: "domain · all connected", ng_cluster: "cluster · closed inside",
 });
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -149,7 +149,7 @@ function networkMap(onPick) {
     const style = d.ref ? `--h:${hue}` : "--h:0;--s:0%";
     const circle = svg("circle", { cx: d.x, cy: d.y, r: d.r, class: `ng-domain${d.ref ? "" : " none"}`, style });
     const label = svg("text", { x: d.x, y: d.y - d.r - 8, class: "ng-domain-label", "text-anchor": "middle" },
-      d.name, d.internal === "full" ? svg("tspan", { class: "ng-sub" }, ` · ${t("ng_internal")}`) : "");
+      d.name, d.ref ? svg("tspan", { class: "ng-sub" }, ` · ${t(d.internal === "full" ? "ng_internal" : "ng_cluster")}`) : "");
     const g = svg("g", { class: "ng-pick", "data-ref": d.ref || "" }, circle, label);
     if (d.ref) {
       points[d.ref] = { x: d.x, y: d.y, r: d.r };

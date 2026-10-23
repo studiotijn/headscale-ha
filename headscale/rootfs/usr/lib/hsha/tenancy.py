@@ -1,4 +1,4 @@
-"""Multi-tenant model: network domains, project locations, LAN devices and connections.
+"""Multi-tenant model: domains and clusters, locations, LAN devices and connections.
 
 Only used with the app option ``multi_tenant``. The model is the single source of
 truth for the ACL policy in that mode (see policygen.py). It is stored in
@@ -6,10 +6,13 @@ truth for the ACL policy in that mode (see policygen.py). It is stored in
 
 Terms
 -----
-domain      A network domain (e.g. Private, Work, a Project with sites). Its user-owned
-            devices belong to the Headscale users listed in ``users``; its servers carry
-            ``tag:<domain>-server``.
-location    A project site with an Edgebox (``tag:<domain>-<location>-edge``). All sites may use
+domain      A network (kind ``domain`` or ``cluster``). Its user-owned devices belong to the
+            Headscale users listed in ``users``; its servers carry ``tag:<domain>-server``.
+            - kind domain: everything inside is connected (users, servers, locations).
+            - kind cluster: nothing inside is connected by default; only connections allow
+              traffic, also between members of the same cluster.
+            Members of either kind can be a source of connections to other networks.
+location    A site with an Edgebox (``tag:<domain>-<location>-edge``). All sites may use
             the same local subnet (e.g. 192.168.1.0/24); the Edgebox maps it 1:1 onto a unique
             VPN subnet (10.81.<n>.0/24), so local host .y is reachable as 10.81.<n>.y.
 device      A named host behind a location (local IP; the VPN IP follows from the mapping).
@@ -30,9 +33,19 @@ from . import paths
 from .store import read_json, write_json
 
 SCHEMA = 1
-KINDS = ("private", "work", "project")
-LEGACY_KINDS = {"client": "project"}  # 0.7.0-0.9.0
+KINDS = ("domain", "cluster")
+# private/work/project (0.10-0.13) and client (0.7-0.9)
+LEGACY_KINDS = {"private": "domain", "work": "domain", "project": "cluster", "client": "cluster"}
 INTERNAL = ("full", "none")
+# The kind decides the internal policy; it is not a separate choice.
+INTERNAL_FOR = {"domain": "full", "cluster": "none"}
+
+
+def normalize_kind(kind: str | None) -> str:
+    kind = LEGACY_KINDS.get(kind or "", kind or "")
+    return kind if kind in KINDS else "cluster"
+
+
 TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,19}$")
@@ -60,13 +73,13 @@ def default_model(admin_user: str) -> dict:
             {
                 "id": "private",
                 "name": "Private",
-                "kind": "private",
+                "kind": "domain",
                 "users": [admin_user],
                 "internal": "full",
                 "home": True,
             },
-            {"id": "work", "name": "Work", "kind": "work", "users": [], "internal": "full", "home": False},
-            {"id": "project", "name": "Project", "kind": "project", "users": [], "internal": "none", "home": False},
+            {"id": "work", "name": "Work", "kind": "domain", "users": [], "internal": "full", "home": False},
+            {"id": "project", "name": "Project", "kind": "cluster", "users": [], "internal": "none", "home": False},
         ],
         "locations": [],
         "devices": [],
@@ -108,8 +121,9 @@ def load(admin_user: str) -> dict:
         model.setdefault(key, default)
     model.setdefault("port_profiles", default_profiles())
     model.setdefault("node_roles", {})
-    for d in model["domains"]:  # "client" was renamed to "project"
-        d["kind"] = LEGACY_KINDS.get(d.get("kind"), d.get("kind"))
+    for d in model["domains"]:  # older kinds; the kind sets the internal policy
+        d["kind"] = normalize_kind(d.get("kind"))
+        d["internal"] = INTERNAL_FOR[d["kind"]]
     for c in model["connections"]:  # 0.7.0 stored one source and one destination as strings
         c["src"], c["dst"] = as_list(c.get("src")), as_list(c.get("dst"))
     return model
@@ -470,11 +484,11 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
             raise ModelError(f"Domain ID '{d['id']}': lowercase letters, digits and '-', max 20 characters")
         if d.get("kind") not in KINDS:
             raise ModelError(f"Domain {d['id']}: kind must be one of {', '.join(KINDS)}")
-        if d.get("internal") not in INTERNAL:
-            raise ModelError(f"Domain {d['id']}: internal must be full or none")
+        if d.get("internal") != INTERNAL_FOR[d["kind"]]:
+            raise ModelError(f"Domain {d['id']}: a {d['kind']} has internal policy {INTERNAL_FOR[d['kind']]}")
         homes += bool(d.get("home"))
-        if d.get("home") and d.get("kind") == "project":
-            raise ModelError("The home network (subnet router of this app) cannot belong to a project domain")
+        if d.get("home") and d.get("kind") == "cluster":
+            raise ModelError("The home network (subnet router of this app) cannot belong to a cluster")
         for u in d.get("users", []):
             if not USER_RE.match(u):
                 raise ModelError(f"Invalid user name '{u}'")
@@ -500,8 +514,6 @@ def validate(model: dict, nodes: list[dict] | None = None, home_routes: list[str
             raise ModelError(f"Location ID '{loc['id']}': lowercase letters, digits and '-', max 20 characters")
         if dom is None:
             raise ModelError(f"Location {loc['id']}: unknown domain {loc['domain']}")
-        if dom["kind"] != "project":
-            raise ModelError(f"Location {loc['id']}: locations belong to project domains")
         local = _net(loc["local_subnet"], f"Location {loc['name']}: local subnet")
         vpn = _net(loc["vpn_subnet"], f"Location {loc['name']}: VPN subnet")
         if local.prefixlen != vpn.prefixlen:
@@ -612,15 +624,9 @@ def check_connection(model: dict, c: dict, nodes_by_id: dict[int, dict], warning
     src_doms = endpoint_domains(model, srcs, nodes_by_id)
     dst_doms = endpoint_domains(model, dsts, nodes_by_id)
     for sd in src_doms:
-        d = domain(model, sd)
-        if d and d["kind"] == "project" and dst_doms - {sd}:
-            raise ModelError(
-                f"Connection {name}: {d['name']} is a project domain; it can never start connections to another domain"
-            )
-    for sd in src_doms:
         for dd in dst_doms - {sd}:
             a, b = domain(model, sd), domain(model, dd)
-            if a and b and a["kind"] != "project" and b["kind"] != "project":
+            if a and b and a["kind"] == "domain" and b["kind"] == "domain":
                 warnings.append(f"Connection {name}: crosses {a['name']} → {b['name']} (allowed, but on purpose?)")
 
 
@@ -807,11 +813,11 @@ def _build(m: dict, kind: str, data: dict, creating: bool) -> dict:
         obj = {
             "id": _text(data, "id").lower(),
             "name": _text(data, "name") or _text(data, "id"),
-            "kind": LEGACY_KINDS.get(_text(data, "kind", "project"), _text(data, "kind", "project")),
+            "kind": normalize_kind(_text(data, "kind", "cluster")),
             "users": sorted({str(u).strip().lower() for u in users}),
-            "internal": _text(data, "internal", "none"),
             "home": bool(data.get("home", False)),
         }
+        obj["internal"] = INTERNAL_FOR[obj["kind"]]
         if not creating:
             current = domain(m, obj["id"]) or {}
             obj["home"] = current.get("home", False)  # only the migration sets the home domain
