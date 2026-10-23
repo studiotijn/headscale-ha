@@ -152,6 +152,7 @@ class MultiTenant:
                     self.last_error = str(exc)
                     log.warning("Automatic re-apply refused: %s", exc)
                     return
+            applied = self.model.get("applied") or {}  # may just have been re-applied
             live = await hs.get_policy() or ""
             self.drift = policygen.HEADER.splitlines()[0] not in live or (applied.get("sha256", "")[:16] not in live)
 

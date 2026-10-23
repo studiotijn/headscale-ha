@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.1
+
+- Fix: right after an automatic re-apply of the policy the panel briefly reported that the policy
+  had been changed outside the app.
+
 ## 0.14.0
 
 - **Two kinds of network: domain and cluster** (replace private, work and project).
