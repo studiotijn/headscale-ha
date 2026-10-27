@@ -545,3 +545,23 @@ def test_db_users(tmp_path):
     con = sqlite3.connect(db)
     assert con.execute("SELECT display_name FROM users WHERE id = 1").fetchone() == ("SRS/SHP",)
     assert con.execute("SELECT COUNT(*) FROM nodes WHERE user_id = 1").fetchone() == (3,)
+
+
+def test_network_as_source_is_not_tested_from_the_home_router():
+    """The home router is in the home network but never a grant source; with the router as the
+    first node (as on a real install) the positive test must use a user's device instead."""
+    nodes = [
+        node(1, "ha-router", tags=["tag:homerouter"], routes=["192.168.1.0/24"]),
+        node(2, "pc-thuis", "admin"),
+    ]
+    m = build()
+    m, _ = tn.apply_change(m, "device", "create", {"id": "dmx", "via": "node:1", "name": "DMX", "ip": "192.168.1.50"})
+    m, _ = tn.apply_change(
+        m, "connection", "create", {"id": "artnet", "src": "domain:private", "dst": "dev:dmx", "ports": "6454"}
+    )
+    r = pg.generate(m, pg.Context("admin", nodes, home_routes=["192.168.1.0/24"]))
+    accepts = [(t["src"], a) for t in r["policy"]["tests"] for a in t.get("accept", [])]
+    assert ("node-2", "dev-dmx:6454") in accepts
+    assert ("node-1", "dev-dmx:6454") not in accepts
+    grant = next(g for g in r["policy"]["grants"] if g["#name"] == "artnet")
+    assert grant["src"] == ["group:dom-private", "tag:private-server"] and grant["ip"] == ["6454"]
