@@ -164,6 +164,17 @@ async def register(auth_id: str, user: str) -> None:
     await run("auth", "register", "--auth-id", auth_id, "--user", user, json_output=False)
 
 
+async def reject(auth_id: str) -> None:
+    """Refuse a sign-in that waits for approval; the device gets an error."""
+    await run("auth", "reject", "--auth-id", auth_id, json_output=False)
+
+
+def gone(exc: Exception) -> bool:
+    """True when Headscale no longer knows the sign-in (approved elsewhere, expired or restarted)."""
+    text = str(exc).lower()
+    return "no pending" in text or "not found" in text or "notfound" in text
+
+
 async def create_apikey(expiration: str = "90d") -> str:
     result = await run("apikeys", "create", "--expiration", expiration, json_output=False)
     return result.strip().splitlines()[-1].strip()

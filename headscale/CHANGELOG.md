@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.0
+
+- **Sign-ins waiting for approval show up by themselves.** A device that signs in through the
+  browser (Tailscale app, or `tailscale up` without a key) appears in a bar at the top of every
+  tab within seconds, with its code and expiry time. Approve it (choosing its network when
+  Networks is on) or reject it. No more copying links or commands. Needs log level `info` or
+  more verbose.
+- **One device list.** With Networks on, devices are listed only on the *Devices* tab, grouped per
+  network, with their type; click a row for *Access*. *Add a device* (owner, key or phone) moved
+  there as well. *Networks → Networks* keeps the networks themselves.
+- **Devices without Tailscale.** New help on the *Devices* tab: how to reach cameras, NAS units
+  and other devices that cannot run Tailscale, for your setup. With Networks on, a button adds
+  such an address directly.
+- **What are tagged devices?** Short explanation on the *Devices* tab of which devices the app tags
+  and why.
+
 ## 0.15.0
 
 - **One user per network, named after it.** Every domain and cluster has exactly one Headscale

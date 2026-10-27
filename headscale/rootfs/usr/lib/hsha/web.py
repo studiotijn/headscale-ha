@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import logging
 import os
 import re
@@ -81,6 +82,34 @@ def _node(n: dict) -> dict:
 
 
 MONITOR_INTERVAL = 900
+PENDING_TTL = 15 * 60  # Headscale forgets a pending sign-in after 15 minutes
+
+
+def pending_signins(handled: set[str], now: float | None = None) -> list[dict]:
+    """Browser sign-ins that wait for approval, newest first (noted from the log by regwatch)."""
+    now = now or time.time()
+    try:
+        started = int(paths.HS_STARTED.read_text().strip() or 0)
+    except (OSError, ValueError):
+        started = 0
+    try:
+        lines = paths.PENDING.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    seen: dict[str, int] = {}
+    for line in lines:
+        try:
+            item = json.loads(line)
+            auth, ts = str(item["id"]), int(item["ts"])
+        except (ValueError, KeyError, TypeError):
+            continue
+        # Headscale keeps them in memory: a restart or 15 minutes makes them invalid.
+        if ts >= started and now - ts < PENDING_TTL and auth not in handled:
+            seen[auth] = ts
+    return [
+        {"id": a, "short": a[-6:], "ts": ts, "expires": ts + PENDING_TTL}
+        for a, ts in sorted(seen.items(), key=lambda x: -x[1])
+    ]
 
 
 class App:
@@ -90,6 +119,7 @@ class App:
         self.wizard = Wizard(self)
         self.started = int(time.time())
         self.update_error: str | None = None
+        self.handled: set[str] = set()  # pending sign-ins approved or rejected through the panel
 
     # ---------------------------------------------------------------- status
     async def status(self, _request: web.Request) -> web.Response:
@@ -224,8 +254,33 @@ class App:
         if self.manager.mt is not None:
             user = self.manager.mt.user_for(body.get("domain"), body.get("user"))
             await hs.ensure_user(user)
-        await hs.register(auth_id, user)
+        try:
+            await hs.register(auth_id, user)
+        except hs.HeadscaleError as exc:
+            if not hs.gone(exc):
+                raise
+            self.handled.add(auth_id)
+            raise ValueError(
+                "This sign-in is no longer waiting: it expired, Headscale restarted, or it was "
+                "approved elsewhere. Sign in again on the device."
+            ) from exc
+        self.handled.add(auth_id)
         self.manager.poke()
+        return web.json_response({"ok": True, "user": user})
+
+    async def pending(self, _request: web.Request) -> web.Response:
+        return web.json_response({"pending": pending_signins(self.handled), "now": int(time.time())})
+
+    async def pending_reject(self, request: web.Request) -> web.Response:
+        auth_id = request.match_info["id"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,128}", auth_id):
+            raise ValueError("Not a valid auth ID")
+        try:
+            await hs.reject(auth_id)
+        except hs.HeadscaleError as exc:
+            if not hs.gone(exc):
+                raise
+        self.handled.add(auth_id)
         return web.json_response({"ok": True})
 
     async def apikey(self, _request: web.Request) -> web.Response:
@@ -670,6 +725,8 @@ class App:
         app.router.add_post("/api/nodes/{id:\\d+}/{action}", self.node_action)
         app.router.add_post("/api/authkey", self.authkey)
         app.router.add_post("/api/register", self.register)
+        app.router.add_get("/api/pending", self.pending)
+        app.router.add_post("/api/pending/{id}/reject", self.pending_reject)
         app.router.add_post("/api/apikey", self.apikey)
         app.router.add_get("/api/wizard", self.wizard_get)
         app.router.add_post("/api/wizard/answer", self.wizard_answer)

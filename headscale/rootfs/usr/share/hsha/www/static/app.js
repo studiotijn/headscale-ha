@@ -264,6 +264,7 @@ function waitForRestartGeneric(maxMs, onError) {
 
 // ---------------------------------------------------------------- devices
 async function loadNodes() {
+  if (typeof mtReady !== "undefined") await mtReady;
   const nodes = await api("nodes");
   const body = $("#nodes");
   if (!nodes.length) {
@@ -272,11 +273,17 @@ async function loadNodes() {
   }
   // Group per network (multi-tenant mode) or per Headscale user / tag.
   let groups = null;
-  if (typeof mtOn !== "undefined" && mtOn && typeof nodeGroups === "function") {
+  const mt = typeof mtOn !== "undefined" && mtOn && typeof nodeGroups === "function";
+  $("#add-card").hidden = mt;
+  if (!mt) $("#devices-add-mt").replaceChildren();
+  let meta = {};
+  if (mt) {
     try {
       const tn = await api("tenancy");
-      const meta = Object.fromEntries(tn.nodes.map((x) => [x.id, x]));
+      mtData = tn;
+      meta = Object.fromEntries(tn.nodes.map((x) => [x.id, x]));
       groups = nodeGroups(nodes.map((n) => ({ ...n, domain: (meta[n.id] || {}).domain, location: (meta[n.id] || {}).location })), tn.model);
+      $("#devices-add-mt").replaceChildren(mtAddDeviceCard());
     } catch { groups = null; }
   }
   if (!groups) {
@@ -299,9 +306,11 @@ async function loadNodes() {
       el("button", { class: "btn secondary small", onclick: () => nodeAction(n.id, "expire") }, t("expire")),
       el("button", { class: "btn danger small", onclick: () => confirm(t("confirm_delete")) && nodeAction(n.id, "delete") }, t("delete")),
     );
-    return el("tr", {},
+    return el("tr", meta[n.id] ? { class: "clickable", onclick: (e) => { if (!e.target.closest("button")) openNodeAccess(n.id); } } : {},
       el("td", {}, el("strong", {}, n.name), n.hostname && n.hostname !== n.name ? el("div", { class: "muted" }, n.hostname) : ""),
-      el("td", {}, n.tags.length ? n.tags.join(", ") : (n.user || "")),
+      el("td", {}, meta[n.id] && typeof nodeIcon === "function"
+        ? [`${nodeIcon(meta[n.id])} ${t(`role_${meta[n.id].role}`)}`, el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))]
+        : (n.tags.length ? n.tags.join(", ") : (n.user || ""))),
       el("td", { class: "mono" }, n.ips.join("\n")),
       el("td", {}, el("span", { class: `pill ${n.online ? "ok" : ""}` }, n.online ? t("online") : t("offline")),
         el("div", { class: "muted" }, n.online ? "" : ago(n.last_seen))),
@@ -452,8 +461,165 @@ $("#manual-form").addEventListener("submit", async (e) => {
   e.target.reset();
 });
 
+// ---------------------------------------------------------------- sign-ins waiting for approval
+// Shown on every tab. Headscale logs each browser sign-in (Tailscale app, `tailscale up` without a
+// key); the app notes them and lists them here until approved, rejected or expired (15 min).
+Object.assign(STRINGS.nl, {
+  pd_title: "Apparaat wacht op goedkeuring", pd_title_n: "{n} apparaten wachten op goedkeuring",
+  pd_meta: "Aangemeld om {time} · code …{code} · verloopt over {min} min",
+  pd_code_hint: "Er wordt geen apparaatnaam meegestuurd. Controleer de code: het zijn de laatste tekens van de link of het commando op het apparaat. Na goedkeuren zie je de naam in de lijst.",
+  pd_owner: "Komt in", pd_reject: "Weigeren", pd_rejected: "Aanmelding geweigerd.", pd_approved: "{name} goedgekeurd.",
+  pd_confirm_reject: "Deze aanmelding weigeren? Het apparaat krijgt een foutmelding en kan opnieuw aanmelden.",
+});
+Object.assign(STRINGS.en, {
+  pd_title: "Device waiting for approval", pd_title_n: "{n} devices waiting for approval",
+  pd_meta: "Signed in at {time} · code …{code} · expires in {min} min",
+  pd_code_hint: "No device name is sent along. Check the code: it is the last characters of the link or command on the device. After approval the name appears in the list.",
+  pd_owner: "Joins", pd_reject: "Reject", pd_rejected: "Sign-in rejected.", pd_approved: "{name} approved.",
+  pd_confirm_reject: "Reject this sign-in? The device gets an error and can sign in again.",
+});
+
+let pendingKey = "";
+let pendingOwners = null; // multi-tenant: [{value, label}] of network users
+
+async function ownerOptions() {
+  if (typeof mtReady !== "undefined") await mtReady;
+  if (!(typeof mtOn !== "undefined" && mtOn)) return null;
+  if (!pendingOwners) {
+    const tn = await api("tenancy");
+    pendingOwners = tn.model.domains.flatMap((d) => (d.users || []).map((u) => ({
+      value: `${d.id}|${u}`, label: (d.users.length > 1 ? `${d.name} · ${u}` : d.name), home: Boolean(d.home) })));
+  }
+  return pendingOwners;
+}
+
+async function loadPending() {
+  const box = $("#pending");
+  let data;
+  try { data = await api("pending"); } catch { return; }
+  const list = data.pending || [];
+  const key = list.map((p) => p.id).join(",");
+  if (key === pendingKey && list.length) {
+    // Same requests: only refresh the countdowns.
+    box.querySelectorAll("[data-expires]").forEach((n) => {
+      n.textContent = fmt("pd_meta", { time: n.dataset.time, code: n.dataset.code,
+        min: Math.max(0, Math.ceil((Number(n.dataset.expires) - Date.now() / 1000) / 60)) });
+    });
+    return;
+  }
+  pendingKey = key;
+  if (!list.length) { box.hidden = true; box.replaceChildren(); return; }
+  const owners = await ownerOptions().catch(() => null);
+  const rows = list.map((p) => {
+    const time = new Date(p.ts * 1000).toLocaleTimeString(LANG, { hour: "2-digit", minute: "2-digit" });
+    const meta = el("div", { class: "muted small", "data-expires": String(p.expires), "data-time": time, "data-code": p.short },
+      fmt("pd_meta", { time, code: p.short, min: Math.max(0, Math.ceil((p.expires - Date.now() / 1000) / 60)) }));
+    let sel = null;
+    if (owners && owners.length) {
+      sel = el("select", {}, ...owners.map((o) => el("option", { value: o.value }, o.label)));
+      const home = owners.find((o) => o.home);
+      if (home) sel.value = home.value;
+    }
+    const ok = el("button", { class: "btn small", type: "button" }, t("approve"));
+    const no = el("button", { class: "btn danger small", type: "button" }, t("pd_reject"));
+    ok.addEventListener("click", async () => {
+      busy(ok, true);
+      try {
+        const body = { auth_id: p.id };
+        if (sel) { const [domain, user] = sel.value.split("|"); Object.assign(body, { domain, user }); }
+        await api("register", { method: "POST", body });
+        banner(fmt("pd_approved", { name: `…${p.short}` }), "ok");
+      } catch (err) { banner(err.message); } finally { busy(ok, false); }
+      pendingKey = "";
+      await loadPending();
+      if (current === "devices") loadNodes().catch(() => {});
+    });
+    no.addEventListener("click", async () => {
+      if (!confirm(t("pd_confirm_reject"))) return;
+      busy(no, true);
+      try { await api(`pending/${encodeURIComponent(p.id)}/reject`, { method: "POST" }); banner(t("pd_rejected"), "ok"); }
+      catch (err) { banner(err.message); } finally { busy(no, false); }
+      pendingKey = "";
+      await loadPending();
+    });
+    return el("div", { class: "pending-row" },
+      el("div", { class: "grow" }, el("strong", {}, "📲 ", list.length > 1 ? `…${p.short}` : t("pd_title")), meta),
+      sel ? el("label", { class: "pending-owner" }, el("span", { class: "small muted" }, t("pd_owner")), sel) : "",
+      el("div", { class: "actions" }, ok, no));
+  });
+  box.replaceChildren(
+    list.length > 1 ? el("strong", {}, fmt("pd_title_n", { n: list.length })) : "",
+    ...rows,
+    el("p", { class: "muted small" }, t("pd_code_hint")));
+  box.hidden = false;
+}
+
+// ---------------------------------------------------------------- help: LAN devices without Tailscale, tags
+Object.assign(STRINGS.nl, {
+  lan_title: "Apparaat zonder Tailscale (camera, NAS, printer, PLC…)",
+  lan_intro: "Apparaten waarop je geen Tailscale kunt installeren bereik je via een apparaat mét Tailscale in hetzelfde netwerk: dat geeft hun adres door aan het VPN (subnet-route). Op het apparaat zelf hoef je niets te doen; het krijgt geen VPN-IP en je gebruikt gewoon het lokale IP.",
+  lan_home_title: "In het netwerk van Home Assistant ({lan})",
+  lan_home: "Dat werkt al: Home Assistant is subnet-router. Met Tailscale aan bereik je onderweg elk adres in dit netwerk, bijvoorbeeld http://192.168.x.y. Wil je een vaste naam in het tailnet en een verbindingstest, voeg het apparaat dan toe op het tabblad Thuisnetwerk of Printers.",
+  lan_home_off: "De subnet-router staat uit. Zet de app-optie Subnet-router aan, dan is dit netwerk onderweg bereikbaar.",
+  lan_remote_title: "In een ander netwerk (werk, ouders, vakantiehuis)",
+  lan_remote: "Daar moet één apparaat met Tailscale draaien (Linux-pc, Raspberry Pi, NAS) dat het adres doorgeeft. Voer daarop uit (zet routes die het al doorgeeft erbij) en keur de route daarna hier goed bij Routes:",
+  lan_mt_steps: "1. Klik op de knop hieronder en kies bij ‘Bereikbaar via’ Home Assistant (thuis), een ander VPN-apparaat dat als router dient, of een locatie met gateway.\n2. Vul een naam en het lokale IP-adres in.\n3. Zet een poort open (knop Poort openzetten): kies wie erbij mag en welke poorten.\n4. Druk op Toepassen (tabblad Netwerken). Pas dan routeert de app precies dit adres (/32); de rest van dat netwerk blijft dicht.\n5. Onderweg: Tailscale aan en open het lokale IP. Bij een locatie gebruik je het VPN-IP (10.81.<nr>.y) dat de app toont.",
+  lan_mt_add: "+ Apparaat zonder Tailscale toevoegen", lan_mt_list: "Bekijk alle toegevoegde adressen (Netwerken → Locaties)",
+  tags_title: "Wat zijn getagde apparaten?",
+  tags_body: "Een getagd apparaat hoort bij een tag (bv. tag:homerouter) in plaats van bij een gebruiker. Zo’n apparaat verloopt niet en blijft werken als een gebruiker verdwijnt; dat is bedoeld voor servers, routers en gateways. Een telefoon of laptop tag je niet.",
+  tags_auto: "Deze app tagt zelf:",
+  tags_router: "Home Assistant zelf (subnet-router): tag:homerouter.",
+  tags_server: "Servers: Apparaten → Toegang → Type Server → ‘Registreren als server van dit netwerk’, of bij Apparaat aanmelden ‘Server in …’ kiezen. Tag: tag:<netwerk>-server.",
+  tags_edge: "Gateways op locaties: knop ‘Sleutel voor gateway’ (Netwerken → Locaties). Tag: tag:<netwerk>-<locatie>-edge.",
+  tags_manual: "Handmatig kan ook (Headplane → apparaat → tags, of headscale nodes tag), maar een tag werkt alleen als hij in het ACL-beleid staat (tagOwners). Met Netwerken aan schrijft de app dat beleid, dus gebruik dan de knoppen hierboven. Een getagd apparaat terugzetten naar een gebruiker kan alleen door het opnieuw aan te melden.",
+});
+Object.assign(STRINGS.en, {
+  lan_title: "Device without Tailscale (camera, NAS, printer, PLC…)",
+  lan_intro: "Devices you cannot install Tailscale on are reached through a device with Tailscale in the same network: it passes their address on to the VPN (subnet route). Nothing changes on the device itself; it gets no VPN IP and you use its local IP.",
+  lan_home_title: "In Home Assistant's network ({lan})",
+  lan_home: "This already works: Home Assistant is the subnet router. With Tailscale on you reach every address in this network on the road, e.g. http://192.168.x.y. For a fixed name in the tailnet and a connection test, add the device on the Home network or Printers tab.",
+  lan_home_off: "The subnet router is off. Turn on the app option Subnet router to make this network reachable on the road.",
+  lan_remote_title: "In another network (work, family, holiday home)",
+  lan_remote: "One device there must run Tailscale (Linux PC, Raspberry Pi, NAS) and pass the address on. Run this on it (include routes it already advertises), then approve the route here under Routes:",
+  lan_mt_steps: "1. Click the button below and under ‘Reachable via’ choose Home Assistant (home), another VPN device acting as router, or a location with a gateway.\n2. Enter a name and the local IP address.\n3. Open a port (Open port button): choose who may reach it and which ports.\n4. Press Apply (Networks tab). Only then does the app route exactly this address (/32); the rest of that network stays closed.\n5. On the road: Tailscale on and open the local IP. For a location use the VPN IP (10.81.<nr>.y) the app shows.",
+  lan_mt_add: "+ Add a device without Tailscale", lan_mt_list: "See all added addresses (Networks → Locations)",
+  tags_title: "What are tagged devices?",
+  tags_body: "A tagged device belongs to a tag (e.g. tag:homerouter) instead of a user. It does not expire and keeps working when a user is removed; that is meant for servers, routers and gateways. You don't tag a phone or laptop.",
+  tags_auto: "This app tags on its own:",
+  tags_router: "Home Assistant itself (subnet router): tag:homerouter.",
+  tags_server: "Servers: Devices → Access → Type Server → ‘Register as a server of this network’, or choose ‘Server in …’ under Add a device. Tag: tag:<network>-server.",
+  tags_edge: "Gateways at locations: the ‘Key for gateway’ button (Networks → Locations). Tag: tag:<network>-<location>-edge.",
+  tags_manual: "Doing it by hand is possible (Headplane → machine → tags, or headscale nodes tag), but a tag only works when it is in the ACL policy (tagOwners). With Networks on, the app writes that policy, so use the buttons above. A tagged device only goes back to a user by signing it in again.",
+});
+
+const lines = (text) => text.split("\n").map((l) => el("p", { class: "small" }, l));
+
+async function renderLanHelp(status) {
+  if (typeof mtReady !== "undefined") await mtReady;
+  const s = status || await api("status").catch(() => ({}));
+  const card = $("#lan-help");
+  const lan = ((s.router || {}).routes || s.lan_routes || []).join(", ") || "LAN";
+  const parts = [el("h2", {}, t("lan_title")), el("p", { class: "muted" }, t("lan_intro"))];
+  if (typeof mtOn !== "undefined" && mtOn && typeof editDevice === "function") {
+    if (!mtData) mtData = await api("tenancy");
+    const router = mtData.nodes.find((n) => n.role === "router");
+    parts.push(...lines(t("lan_mt_steps")), el("div", { class: "actions" },
+      el("button", { class: "btn", type: "button", onclick: () => editDevice(null, router ? { via: String(router.id) } : {}) }, t("lan_mt_add")),
+      el("button", { class: "btn secondary", type: "button", onclick: () => { mtSub = "sites"; show("networks"); } }, t("lan_mt_list"))));
+  } else {
+    const on = (s.router || {}).enabled !== false;
+    parts.push(el("h3", {}, fmt("lan_home_title", { lan })), el("p", { class: "small" }, t(on ? "lan_home" : "lan_home_off")),
+      el("h3", {}, t("lan_remote_title")), el("p", { class: "small" }, t("lan_remote")),
+      copyable("sudo tailscale set --advertise-routes=<ip>/32"));
+  }
+  card.replaceChildren(...parts);
+  $("#tags-help").replaceChildren(el("p", { class: "small" }, t("tags_body")), el("p", { class: "small" }, t("tags_auto")),
+    el("ul", { class: "small" }, ...["tags_router", "tags_server", "tags_edge"].map((k) => el("li", {}, t(k)))),
+    el("p", { class: "small muted" }, t("tags_manual")));
+}
+
 // ---------------------------------------------------------------- tabs
-const loaders = { overview: loadStatus, devices: loadNodes, printers: loadPrinters };
+const loaders = { overview: loadStatus, devices: () => Promise.all([loadNodes(), renderLanHelp()]), printers: loadPrinters };
 let current = "overview";
 
 function show(tab) {
@@ -479,4 +645,8 @@ function boot() {
     api("wizard").then((w) => show(w.progress < 100 && (w.overview || {}).visible ? "setup" : "overview")).catch(() => show("overview"));
   }
   setInterval(() => { if (current === "overview" && !document.hidden) loadStatus().catch(() => {}); }, 15000);
+  // Sign-ins waiting for approval: checked on every tab.
+  loadPending();
+  setInterval(() => { if (!document.hidden) loadPending(); }, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadPending(); });
 }

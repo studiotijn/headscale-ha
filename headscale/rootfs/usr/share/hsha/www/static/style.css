@@ -368,3 +368,15 @@ svg.focus .ng-edge.hi { opacity: 1; stroke: var(--warn); stroke-width: 2.6; }
 .signin-way.disabled { opacity: .5; }
 .signin-or { align-self: center; }
 @media (max-width: 760px) { .signin-ways { grid-template-columns: 1fr; } .signin-or { justify-self: center; } }
+
+/* Sign-ins waiting for approval: stays at the top of every tab */
+.pending {
+  position: sticky; top: 8px; z-index: 5;
+  border: 2px solid var(--warn); background: var(--warn-bg); border-radius: var(--radius);
+  padding: 10px 14px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+}
+.pending-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 6px 0; }
+.pending-row + .pending-row { border-top: 1px solid var(--border); }
+.pending-row .grow { flex: 1 1 220px; min-width: 0; }
+.pending-owner { display: flex; flex-direction: column; gap: 2px; }
+.pending p { margin: 6px 0 0; }
