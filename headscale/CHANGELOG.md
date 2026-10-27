@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.1
+
+- **Apply from any tab.** With Networks on, saved changes that are not active yet show a bar at
+  the top of every tab with *Apply* and *Review*. A change on the *Devices* tab (role, network,
+  groups, a device without Tailscale) is applied right there, without going to *Networks*.
+
 ## 0.16.0
 
 - **Sign-ins waiting for approval show up by themselves.** A device that signs in through the

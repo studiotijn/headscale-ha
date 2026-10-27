@@ -380,3 +380,5 @@ svg.focus .ng-edge.hi { opacity: 1; stroke: var(--warn); stroke-width: 2.6; }
 .pending-row .grow { flex: 1 1 220px; min-width: 0; }
 .pending-owner { display: flex; flex-direction: column; gap: 2px; }
 .pending p { margin: 6px 0 0; }
+.apply-bar { border-color: var(--primary); background: var(--card); }
+.pending + .apply-bar { top: 8px; }

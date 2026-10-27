@@ -281,6 +281,7 @@ async function loadNodes() {
     try {
       const tn = await api("tenancy");
       mtData = tn;
+      renderApplyBar();
       meta = Object.fromEntries(tn.nodes.map((x) => [x.id, x]));
       groups = nodeGroups(nodes.map((n) => ({ ...n, domain: (meta[n.id] || {}).domain, location: (meta[n.id] || {}).location })), tn.model);
       $("#devices-add-mt").replaceChildren(mtAddDeviceCard());
@@ -627,6 +628,7 @@ function show(tab) {
   document.querySelectorAll("[role=tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   document.querySelectorAll(".tab").forEach((s) => { s.hidden = s.id !== `tab-${tab}`; });
   try { sessionStorage.setItem("hsha-tab", tab); } catch { /* storage unavailable */ }
+  if (typeof renderApplyBar === "function") renderApplyBar();
   loaders[tab]().catch((err) => banner(err.message));
 }
 
