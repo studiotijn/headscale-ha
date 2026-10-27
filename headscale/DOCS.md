@@ -100,8 +100,11 @@ file in `/ssl` was renewed but Headscale still serves the old certificate.
    the sidebar. Under *Subnet router* the state should be `Running`, with your LAN approved.
 2. **Laptop / desktop**: *Devices → Create key*, then run the shown `tailscale up …` command.
 3. **iPhone / Android**: set the custom coordination server in the Tailscale app
-   (see the instructions in the panel) and sign in. The app opens a page with a registration
-   command. Paste the page address or the command into *Approve a device*.
+   (see the instructions in the panel) and sign in. A yellow bar *Device waiting for approval*
+   appears at the top of the panel, on every tab, within a few seconds: check the code (the last
+   characters of the link on the device), choose the network if asked, and press *Approve*.
+   The same works for `tailscale up --login-server …` without a key. Pasting the page address or
+   command into *Approve a device* still works too.
 4. **Headplane**: *Overview → Create API key*, open Headplane and sign in with that key.
 
 ## ACL policy
@@ -156,6 +159,40 @@ normal print menu.
 
 `dns_via_home` sends **all** DNS of tailnet devices to Home Assistant, which gives ad blocking
 on the road. When home is down, DNS stops working on the road.
+
+### Sign-ins waiting for approval
+
+Headscale keeps browser sign-ins only in memory and has no command to list them. The app reads
+the Headscale log (`starting node registration using auth id: …`) to show them. That means:
+
+- they only appear with the option *Log level* at `info`, `debug` or `trace`;
+- Headscale sends no device name with them, only the code; the name shows in the device list
+  after approval;
+- a sign-in is valid for 15 minutes and is lost when Headscale restarts. Approving one that was
+  already approved elsewhere (Headplane, CLI) tells you it is no longer waiting; *Reject* then
+  only hides it.
+
+### Devices without Tailscale
+
+Cameras, NAS units, PLCs and other devices that cannot run Tailscale are reached through a device
+with Tailscale in the same network, which advertises their address as a subnet route. *Devices →
+Device without Tailscale* explains the steps for your setup:
+
+- **In Home Assistant's network** it already works through the built-in subnet router: use the
+  device's local IP with Tailscale on. The *Home network* and *Printers* tabs add a fixed name and
+  a connection test.
+- **In another network**, run `tailscale set --advertise-routes=<ip>/32` on a device with
+  Tailscale there and approve the route under *Devices → Routes*.
+- **With Networks on**, add the address under *Reachable via* (Home Assistant, a VPN device or a
+  location), open a port to it and press *Apply*; the app then routes exactly that address.
+
+### Tagged devices
+
+A tagged device belongs to a tag instead of a user: it does not expire and is meant for servers,
+routers and gateways. The app tags Home Assistant's router (`tag:homerouter`), servers
+(*Access → Register as a server of this network*, `tag:<network>-server`) and gateways
+(`tag:<network>-<location>-edge`). Tagging by hand (Headplane, `headscale nodes tag`) only works
+for tags in the ACL policy; with Networks on the app writes that policy, so use its buttons.
 
 ## Home network devices
 

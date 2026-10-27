@@ -81,6 +81,8 @@ Object.assign(STRINGS.nl, {
   mt_owner_hint: "Een apparaat hoort bij precies één gebruiker, of is een server van een netwerk. Dat bepaalt in welk netwerk het komt en dus wat het mag. De rechten zelf stel je in bij Verbindingen.",
   mt_way_key: "Laptop, pc of server", mt_way_key_hint: "Maak een sleutel en voer het commando uit op het apparaat.",
   mt_way_phone: "Telefoon of tablet", mt_way_phone_hint: "Log in in de Tailscale-app; plak hier de link of het commando dat de app toont.",
+  mt_nodes_moved: "Alle {n} apparaten staan op het tabblad Apparaten, gegroepeerd per netwerk. Daar meld je ook nieuwe apparaten aan en open je per apparaat de Toegang.",
+  mt_to_devices: "Naar Apparaten",
   mt_way_or: "of", mt_server_of: "🗄 Server in {x} (getagd, verloopt niet)",
   grp_servers: "Servers", grp_behind: "Achter routers", grp_ws: "Werkplekken (RDP/VNC/bestanden)", grp_people_src: "Personen en hun apparaten",
   mt_server_register: "Servers meld je aan met een sleutel, niet via de browser.",
@@ -165,6 +167,8 @@ Object.assign(STRINGS.en, {
   mt_owner_hint: "A device belongs to exactly one user, or is a server of a network. That decides which network it joins and so what it may do. The access itself is set under Connections.",
   mt_way_key: "Laptop, PC or server", mt_way_key_hint: "Create a key and run the command on the device.",
   mt_way_phone: "Phone or tablet", mt_way_phone_hint: "Sign in in the Tailscale app; paste the link or command the app shows here.",
+  mt_nodes_moved: "All {n} devices are on the Devices tab, grouped per network. Sign in new devices there and open a device's Access.",
+  mt_to_devices: "Go to Devices",
   mt_way_or: "or", mt_server_of: "🗄 Server in {x} (tagged, does not expire)",
   grp_servers: "Servers", grp_behind: "Behind routers", grp_ws: "Workstations (RDP/VNC/files)", grp_people_src: "People and their devices",
   mt_server_register: "Servers sign in with a key, not through the browser.",
@@ -835,6 +839,16 @@ function mtDomainsView() {
       el("td", { class: "small" }, t(`internal_${d.internal}`)),
       el("td", { class: "actions" }, editBtn((e) => { e.stopPropagation(); editDomain(d); }))))));
 
+  // Devices themselves are listed once, on the Devices tab (grouped per network).
+  const devCount = mtData.nodes.length;
+  const pointer = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
+    el("p", { class: "muted" }, fmt("mt_nodes_moved", { n: devCount })),
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => show("devices") }, t("mt_to_devices"))));
+  return [domCard, pointer];
+}
+
+// "Add a device" for multi-tenant mode; shown on the Devices tab.
+function mtAddDeviceCard() {
   const who = el("select", {}, ...mtData.model.domains.map((d) => el("optgroup", { label: d.name },
     ...d.users.map((u) => el("option", { value: `${d.id}|${u}` }, fmt("mt_owner_device", { x: d.name }))),
     el("option", { value: `${d.id}|__server__` }, fmt("mt_server_of", { x: d.name })))));
@@ -858,7 +872,7 @@ function mtDomainsView() {
       const [domain, user] = who.value.split("|");
       if (user === "__server__") throw new Error(t("mt_server_register"));
       await api("register", { method: "POST", body: { domain, user, auth_id: authId.value } });
-      authId.value = ""; banner(t("registered"), "ok"); await loadNetworks();
+      authId.value = ""; banner(t("registered"), "ok"); await loadNodes();
     } catch (err) { banner(err.message); } finally { busy(regBtn, false); }
   });
   const phoneWay = el("div", { class: "signin-way" }, el("strong", {}, t("mt_way_phone")), el("p", { class: "muted small" }, t("mt_way_phone_hint")),
@@ -867,16 +881,7 @@ function mtDomainsView() {
   const syncWays = () => { phoneWay.classList.toggle("disabled", who.value.endsWith("|__server__")); regBtn.disabled = who.value.endsWith("|__server__"); };
   who.addEventListener("change", syncWays);
   syncWays();
-  const nodeCard = el("article", { class: "card" }, el("h2", {}, t("mt_nodes")),
-    mtTable([t("name"), t("mt_role"), t("mt_domain"), "IP", t("status"), t("routes"), ""], groupNodeRows(mtData.nodes, 7, (n) => el("tr", { class: "clickable", onclick: () => openNodeAccess(n.id) },
-      el("td", {}, el("strong", {}, n.name), el("div", { class: "muted small" }, n.tags.length ? n.tags.join(", ") : (n.user || ""))),
-      el("td", { class: "nowrap" }, `${nodeIcon(n)} ${t(`role_${n.role}`)}`),
-      el("td", {}, n.domain ? (mtDomain(n.domain) || {}).name + (n.location ? ` · ${(mtLoc(n.location) || {}).name}` : "") : el("span", { class: "warn-text" }, t("mt_unassigned"))),
-      el("td", { class: "mono" }, n.ipv4 || ""),
-      el("td", {}, el("span", { class: `pill ${n.online ? "ok" : ""}` }, n.online ? t("online") : t("offline"))),
-      el("td", { class: "mono" }, n.approved_routes.join("\n")),
-      el("td", { class: "actions" }, el("button", { class: "btn small", type: "button", onclick: (e) => { e.stopPropagation(); openNodeAccess(n.id); } }, t("mt_access_btn")))))),
-    el("h3", {}, t("mt_add_device")),
+  return el("article", { class: "card" }, el("h2", {}, t("mt_add_device")),
     el("div", { class: "row" }, Object.assign(mtField(t("mt_owner"), who), { className: "field grow-field" })),
     el("p", { class: "muted small" }, t("mt_owner_hint")),
     el("div", { class: "signin-ways" },
@@ -884,7 +889,6 @@ function mtDomainsView() {
         el("div", { class: "row" }, mtField(t("valid_for"), hours), keyBtn), out),
       el("div", { class: "signin-or muted" }, t("mt_way_or")),
       phoneWay));
-  return [domCard, nodeCard];
 }
 
 async function mtLogView() {
@@ -962,4 +966,4 @@ function mtOffCard() {
 
 loaders.networks = loadNetworks;
 let mtOn = false;
-api("status").then((s) => { mtOn = Boolean(s.multi_tenant); }).catch(() => {});
+const mtReady = api("status").then((s) => { mtOn = Boolean(s.multi_tenant); }).catch(() => {});

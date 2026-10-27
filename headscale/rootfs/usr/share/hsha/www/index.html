@@ -21,6 +21,7 @@
 
   <main>
     <div id="banner" class="banner" hidden></div>
+    <div id="pending" class="pending" hidden aria-live="polite"></div>
 
     <!-- Overview -->
     <section id="tab-overview" class="tab">
@@ -63,7 +64,8 @@
 
     <!-- Devices -->
     <section id="tab-devices" class="tab" hidden>
-      <article class="card">
+      <div id="devices-add-mt"></div>
+      <article class="card" id="add-card">
         <h2 data-i18n="add_device">Add a device</h2>
         <p class="muted" data-i18n="add_device_intro">Create a one-time key, or sign in from the Tailscale app with a custom coordination server.</p>
         <div class="row">
@@ -106,6 +108,15 @@
             <tbody id="nodes"></tbody>
           </table>
         </div>
+      </article>
+
+      <article class="card" id="lan-help"></article>
+
+      <article class="card">
+        <details>
+          <summary data-i18n="tags_title">What are tagged devices?</summary>
+          <div id="tags-help"></div>
+        </details>
       </article>
     </section>
 

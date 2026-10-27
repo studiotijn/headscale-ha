@@ -27,6 +27,9 @@ TS_SOCKET = Path(os.environ.get("HSHA_TS_SOCKET", "/run/tailscale/tailscaled.soc
 
 STATE = DATA / "hsha" / "state.json"
 RUNTIME = RUN / "runtime.json"
+# Browser sign-ins waiting for approval, noted from the Headscale log (regwatch.py).
+PENDING = RUN / "pending.jsonl"
+HS_STARTED = RUN / "headscale-started"
 
 SSL = Path(os.environ.get("HSHA_SSL", "/ssl"))
 ETC_HOSTS = Path(os.environ.get("HSHA_ETC_HOSTS", "/etc/hosts"))

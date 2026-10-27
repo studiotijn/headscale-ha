@@ -493,3 +493,46 @@ def test_dns_label():
     assert dns_label("  --Ünïcode__box--") == "n-code-box"
     assert dns_label("a" * 80) == "a" * 63
     assert dns_label("!!!") == ""
+
+
+def test_regwatch_notes_pending_signins(tmp_path, monkeypatch):
+    from hsha import paths, regwatch
+
+    monkeypatch.setattr(paths, "PENDING", tmp_path / "pending.jsonl")
+    auth = "hskey-authreq-" + "A1b2C3d4E5f6G7h8I9j0K_-z"
+    line = (
+        f"\x1b[90m2026-10-27T19:31:00+01:00\x1b[0m \x1b[32mINF\x1b[0m starting node registration using auth id: {auth}"
+    )
+    assert regwatch.auth_id(line.encode()) == auth
+    assert regwatch.auth_id(b"2026-10-27 INF some other line\n") is None
+    regwatch.record(auth, now=1000)
+    assert json.loads(paths.PENDING.read_text().splitlines()[-1]) == {"id": auth, "ts": 1000}
+
+
+def test_pending_signins_expire_restart_and_handled(tmp_path, monkeypatch):
+    from hsha import paths
+    from hsha.web import PENDING_TTL, pending_signins
+
+    monkeypatch.setattr(paths, "PENDING", tmp_path / "pending.jsonl")
+    monkeypatch.setattr(paths, "HS_STARTED", tmp_path / "started")
+    paths.HS_STARTED.write_text("1000\n")
+    rows = [
+        {"id": "before-restart", "ts": 900},
+        {"id": "expired-one", "ts": 1001},
+        {"id": "approved-one", "ts": 2000},
+        {"id": "waiting-one", "ts": 2000},
+        {"id": "waiting-two", "ts": 2100},
+    ]
+    paths.PENDING.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
+    now = 1001 + PENDING_TTL + 1
+    got = pending_signins({"approved-one"}, now=now)
+    assert [p["id"] for p in got] == ["waiting-two", "waiting-one"]
+    assert got[0]["short"] == "ng-two" and got[0]["expires"] == 2100 + PENDING_TTL
+
+
+def test_pending_signins_without_file(tmp_path, monkeypatch):
+    from hsha import paths
+    from hsha.web import pending_signins
+
+    monkeypatch.setattr(paths, "PENDING", tmp_path / "missing.jsonl")
+    assert pending_signins(set()) == []
