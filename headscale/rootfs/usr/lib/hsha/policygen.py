@@ -340,7 +340,8 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
         if port is None:
             continue
         src = next(
-            (a for r in tn.expand_refs(model, c["src"]) for a in _test_hosts(model, ctx, r, reps, node_ref)), None
+            (a for r in tn.expand_refs(model, c["src"]) for a in _test_hosts(model, ctx, r, reps, node_ref, True)),
+            None,
         )
         dst = next(
             (a for r in tn.expand_refs(model, c["dst"]) for a in _test_hosts(model, ctx, r, reps, node_ref)), None
@@ -350,11 +351,24 @@ def _tests(model: dict, ctx: Context, hosts: dict, node_ref) -> list[dict]:
     return tests
 
 
-def _test_hosts(model: dict, ctx: Context, ref: str, reps: dict, node_ref) -> list[str]:
+def _test_hosts(model: dict, ctx: Context, ref: str, reps: dict, node_ref, is_src: bool = False) -> list[str]:
     """Single-host aliases that stand for a reference in a positive test."""
     kind, _, key = ref.partition(":")
     if kind == "node":
         return [a for a in [node_ref(int(key))] if a]
+    if kind == "domain" and is_src:
+        # As a source a network means its users' devices and servers (see _endpoint); the home
+        # router belongs to the home network but is never a source, so it can't stand for it.
+        for n in ctx.nodes:
+            if (
+                tn.node_domain(model, n) == key
+                and not tn.node_location(model, n)
+                and "tag:homerouter" not in tn.node_tags(n)
+            ):
+                alias = node_ref(int(n["id"]))
+                if alias:
+                    return [alias]
+        return []
     if kind == "user":
         node = next((n for n in ctx.nodes if tn.node_user(n) == key and not tn.node_tags(n)), None)
         return [a for a in [node_ref(int(node["id"]))] if a] if node else []

@@ -51,7 +51,10 @@ Object.assign(STRINGS.nl, {
   mt_add_device: "Apparaat aanmelden", mt_user: "Gebruiker",
   mt_audit: "Logboek", mt_none_yet: "Nog niets.", mt_route_warn: "Routecontrole",
   mt_disabled: "Multi-tenant staat uit. Zet de app-optie multi_tenant aan (tabblad Configuratie van de app).",
-  mt_pending_hint: "Opgeslagen. Druk op Toepassen om het live te zetten.",
+  mt_pending_hint: "Opgeslagen. Druk op Toepassen (balk bovenaan) om het live te zetten.",
+  ab_pending: "Wijzigingen nog niet actief", ab_pending_hint: "Je wijzigingen zijn opgeslagen, maar Headscale gebruikt nog het oude beleid.",
+  ab_drift: "Beleid is buiten de app gewijzigd", ab_drift_hint: "Toepassen zet het beleid van de app terug.",
+  ab_review: "Bekijken", ab_applied: "Toegepast. Wijzigingen zijn actief.",
   mt_off_title: "Netwerken en toegangsbeheer",
   mt_off_intro: "Hier stel je per apparaat, gebruiker en groep in wie met wie mag verbinden en welke poorten openstaan. De app zet daarmee ook de routering: alleen de adressen die je openzet worden doorgerouteerd. Dit staat nu uit; zolang het uit staat geldt het huidige beleid (beheerders mogen alles).",
   mt_off_steps: "Na inschakelen: de app herstart (± 30 s), je huidige apparaten komen in het domein Home (de naam kun je wijzigen), en er verandert nog niets aan de toegang tot je op Activeren drukt.",
@@ -137,7 +140,10 @@ Object.assign(STRINGS.en, {
   mt_add_device: "Add a device", mt_user: "User",
   mt_audit: "Log", mt_none_yet: "Nothing yet.", mt_route_warn: "Route check",
   mt_disabled: "Multi-tenant mode is off. Enable the app option multi_tenant (the app's Configuration tab).",
-  mt_pending_hint: "Saved. Press Apply to make it live.",
+  mt_pending_hint: "Saved. Press Apply (bar at the top) to make it live.",
+  ab_pending: "Changes not active yet", ab_pending_hint: "Your changes are saved, but Headscale still uses the old policy.",
+  ab_drift: "Policy was changed outside the app", ab_drift_hint: "Apply restores the app's policy.",
+  ab_review: "Review", ab_applied: "Applied. Changes are active.",
   mt_off_title: "Networks and access control",
   mt_off_intro: "Here you set per device, user and group who may connect to whom and which ports are open. The app also sets the routing from that: only the addresses you open are routed. This is off now; while it is off the current policy applies (admins may reach everything).",
   mt_off_steps: "After enabling: the app restarts (about 30 s), your current devices go into the Home domain (you can rename it), and nothing changes in access until you press Activate.",
@@ -364,7 +370,40 @@ async function mtSave(kind, action, data) {
   await api(`tenancy/${kind}/${action}`, { method: "POST", body: data });
   banner(t("mt_pending_hint"), "ok");
   if (current === "networks") await loadNetworks(); else mtData = await api("tenancy");
+  renderApplyBar();
+  if (current === "devices") loadNodes().catch(() => {});
   mtRefreshers.forEach((fn) => fn());
+}
+
+// ---------------------------------------------------------------- apply bar (every tab)
+// Saved but not applied changes show at the top of every tab, so a change made on the Devices tab
+// can be applied right there.
+function renderApplyBar() {
+  const bar = $("#mt-apply");
+  const s = mtOn && mtData ? mtData.status : null;
+  // The Networks tab has the same buttons in its status card.
+  if (!s || !s.activated || !(s.pending || s.drift) || current === "networks") { bar.hidden = true; bar.replaceChildren(); return; }
+  const out = el("div");
+  const apply = el("button", { class: "btn small", type: "button" }, t("mt_apply"));
+  const review = el("button", { class: "btn secondary small", type: "button", onclick: () => { mtSub = "connections"; show("networks"); } }, t("ab_review"));
+  apply.addEventListener("click", async () => {
+    busy(apply, true);
+    try {
+      await api("tenancy/apply", { method: "POST" });
+      banner(t("ab_applied"), "ok");
+      mtData = await api("tenancy");
+      renderApplyBar();
+      if (current === "networks") await loadNetworks();
+      else if (current === "devices") await loadNodes();
+    } catch (err) {
+      out.replaceChildren(note("fail", el("p", {}, t("mt_check_fail")), el("pre", { class: "mono" }, err.message)));
+    } finally { busy(apply, false); }
+  });
+  bar.replaceChildren(el("div", { class: "pending-row" },
+    el("div", { class: "grow" }, el("strong", {}, `⚙ ${t(s.drift ? "ab_drift" : "ab_pending")}`),
+      el("div", { class: "muted small" }, t(s.drift ? "ab_drift_hint" : "ab_pending_hint"))),
+    el("div", { class: "actions" }, review, apply)), out);
+  bar.hidden = false;
 }
 
 // ---------------------------------------------------------------- connection editor
@@ -947,6 +986,7 @@ async function loadNetworks() {
     onclick: () => { mtSub = k; try { sessionStorage.setItem("hsha-mt-sub", k); } catch { /* ignore */ } loadNetworks().catch((e) => banner(e.message)); },
   }, t(`sub_${k}`))));
   root.replaceChildren(mtStatusCard(), subnav, ...(await MT_VIEWS[mtSub]()));
+  renderApplyBar();
 }
 
 function mtOffCard() {
@@ -966,4 +1006,7 @@ function mtOffCard() {
 
 loaders.networks = loadNetworks;
 let mtOn = false;
-const mtReady = api("status").then((s) => { mtOn = Boolean(s.multi_tenant); }).catch(() => {});
+const mtReady = api("status").then(async (s) => {
+  mtOn = Boolean(s.multi_tenant);
+  if (mtOn) { mtData = await api("tenancy"); renderApplyBar(); }
+}).catch(() => {});
