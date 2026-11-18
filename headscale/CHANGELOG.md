@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.0
+
+- **Gateway firewall: one-liner pull instead of copy/paste.** *Locations → Gateway key* now also
+  shows a `curl ... | nft -f -` command: the gateway fetches its own nftables ruleset directly
+  over the tailnet with a per-location token, via a small listener next to the ingress UI,
+  instead of downloading it through HA ingress and copying it over by hand.
+
 ## 0.16.1
 
 - **Apply from any tab.** With Networks on, saved changes that are not active yet show a bar at

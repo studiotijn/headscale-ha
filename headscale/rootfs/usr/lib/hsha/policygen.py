@@ -28,6 +28,7 @@ HEADER = (
 )
 TEST_PORT = 22  # port used for deny tests (no generated grant ever has these sources)
 MAX_REPS = 2  # nodes per domain used as test representatives
+EDGE_PULL_PORT = 9743  # web.py's pull listener: gateways fetch their own nftables ruleset here
 
 
 def _group(domain_id: str) -> str:
@@ -142,6 +143,19 @@ def generate(model: dict, ctx: Context) -> dict:
         auto_approvers["exitNode"] = ["tag:homerouter"]
 
     grants: list[dict] = []
+
+    # Edge pull endpoint (web.py, EDGE_PULL_PORT): every gateway may fetch its own
+    # nftables ruleset from the Home Assistant host, independent of domain/connections.
+    # The endpoint itself still checks a per-location token (tenancy.edge_pull_token).
+    if model["locations"]:
+        grants.append(
+            {
+                "#name": "Edge pull: own nftables ruleset",
+                "src": [tn.edge_tag(loc) for loc in model["locations"]],
+                "dst": ["tag:homerouter"],
+                "ip": [f"tcp:{EDGE_PULL_PORT}"],
+            }
+        )
 
     # A domain is connected inside on every level: users and servers reach all of it.
     # A cluster has no internal grant: only connections allow traffic, also inside it.

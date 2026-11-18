@@ -39,3 +39,7 @@ WWW = Path(os.environ.get("HSHA_WWW", "/usr/share/hsha/www"))
 TENANCY = DATA / "hsha" / "tenancy.json"
 AUDIT = DATA / "hsha" / "audit.jsonl"  # .jsonl: *.log files are excluded from backups
 POLICY_HISTORY = DATA / "hsha" / "policy-history"
+# HMAC key for per-location Edgebox pull tokens (tenancy.edge_pull_token). Kept out of
+# tenancy.json on purpose: that file is included in diagnostics/exports and documented
+# as containing no secrets.
+EDGE_PULL_SECRET = DATA / "hsha" / "edge-pull.key"

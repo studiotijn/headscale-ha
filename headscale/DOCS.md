@@ -263,9 +263,11 @@ Off by default; with the option off nothing below changes.
   Device changes (a new laptop for a project user) are re-applied automatically.
 - **Gateway.** *Locations → Gateway key* gives a one-time `tailscale up` command with the right tag
   and route; *Firewall (nftables)* gives the NAT and an allowlist that only forwards the
-  configured connections. Load it with `nft -f`, enable `net.ipv4.ip_forward`, and give the gateway
-  its own firewall zone on the site router. Download the firewall again after changing connections and
-  run `conntrack -D -s 100.64.0.0/10` after revoking access.
+  configured connections, plus a ready `curl ... | nft -f -` one-liner so the gateway can pull its
+  own ruleset directly over the tailnet (its own per-location token, checked by a small listener
+  next to the ingress UI — not the HA ingress session). Enable `net.ipv4.ip_forward` and give the
+  gateway its own firewall zone on the site router. Re-run the one-liner (or download the firewall
+  again) after changing connections, and run `conntrack -D -s 100.64.0.0/10` after revoking access.
 - **Routes.** A gateway may only have the VPN subnet of its own location approved; anything else is
   withdrawn automatically and logged. Other unexpected routes show up as warnings.
 - **Log.** Every change and applied policy is written to `/data/hsha/audit.jsonl` (in backups).

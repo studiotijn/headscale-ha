@@ -37,7 +37,8 @@ Object.assign(STRINGS.nl, {
   mt_number: "Nummer", mt_domain: "Netwerk", mt_local: "Lokaal subnet", mt_vpn: "VPN-subnet", mt_vpn_auto: "automatisch 10.81.<nr>.0/24",
   mt_iface: "LAN-interface van de gateway", mt_edge: "Gateway", mt_edge_none: "nog niet aangemeld", mt_route_ok: "route actief", mt_route_wait: "route niet goedgekeurd",
   mt_edge_key: "Sleutel voor gateway", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Voer uit op de gateway (sleutel 1 uur geldig, eenmalig):",
-  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1), laad de firewall (knop Firewall) en zet de gateway op de router van de locatie in een eigen firewallzone.",
+  mt_edge_pull: "Daarna: voer dit uit op de gateway om de firewall direct op te halen (geen kopiëren/plakken nodig):",
+  mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1) en zet de gateway op de router van de locatie in een eigen firewallzone. Herhaal de opdracht hierboven na het wijzigen van verbindingen.",
   mt_devices: "Apparaten op locaties", mt_local_ip: "Lokaal IP", mt_vpn_ip: "VPN-IP", mt_location: "Locatie",
   mt_domains: "Netwerken", mt_kind: "Soort", mt_users: "Gebruiker", mt_internal_policy: "Intern beleid",
   mt_id_hint: "Wordt ook de gebruikersnaam in Headscale. Kan later niet meer veranderen.",
@@ -126,7 +127,8 @@ Object.assign(STRINGS.en, {
   mt_number: "Number", mt_domain: "Network", mt_local: "Local subnet", mt_vpn: "VPN subnet", mt_vpn_auto: "automatic 10.81.<no>.0/24",
   mt_iface: "Gateway LAN interface", mt_edge: "Gateway", mt_edge_none: "not signed in yet", mt_route_ok: "route active", mt_route_wait: "route not approved",
   mt_edge_key: "Gateway key", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Run on the gateway (key valid for 1 hour, single use):",
-  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1), load the firewall (Firewall button) and put the gateway in its own firewall zone on the location's router.",
+  mt_edge_pull: "Then: run this on the gateway to fetch the firewall directly (no copy/paste needed):",
+  mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1) and put the gateway in its own firewall zone on the location's router. Re-run the command above after changing connections.",
   mt_devices: "Devices at locations", mt_local_ip: "Local IP", mt_vpn_ip: "VPN IP", mt_location: "Location",
   mt_domains: "Networks", mt_kind: "Kind", mt_users: "User", mt_internal_policy: "Internal policy",
   mt_id_hint: "Also becomes the user name in Headscale. Can't be changed later.",
@@ -824,7 +826,11 @@ function mtSitesView() {
         busy(keyBtn, true);
         try {
           const r = await api(`tenancy/locations/${l.id}/key`, { method: "POST" });
-          out.replaceChildren(note("info", el("p", {}, `${l.name}: ${t("mt_edge_cmd")}`), copyable(r.command), el("p", { class: "small" }, t("mt_edge_steps"))));
+          out.replaceChildren(note("info",
+            el("p", {}, `${l.name}: ${t("mt_edge_cmd")}`), copyable(r.command),
+            r.pull_command ? el("p", {}, t("mt_edge_pull")) : "",
+            r.pull_command ? copyable(r.pull_command) : "",
+            el("p", { class: "small" }, t("mt_edge_steps"))));
         } catch (err) { banner(err.message); } finally { busy(keyBtn, false); }
       });
       const edge = l.edge

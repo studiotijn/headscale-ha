@@ -25,13 +25,16 @@ connection  An explicitly allowed flow: source (a node or all users of a domain)
 from __future__ import annotations
 
 import copy
+import hashlib
+import hmac
 import ipaddress
 import re
+import secrets
 import time
 import uuid
 
 from . import paths
-from .store import read_json, write_json
+from .store import read_json, write_json, write_text_atomic
 
 SCHEMA = 1
 KINDS = ("domain", "cluster")
@@ -187,6 +190,25 @@ def server_tag(domain_id: str) -> str:
 
 def edge_tag(loc: dict) -> str:
     return f"tag:{loc['domain']}-{loc['id']}-edge"
+
+
+def _edge_pull_secret() -> bytes:
+    """Lazily-created HMAC key, stored outside tenancy.json (see paths.EDGE_PULL_SECRET)."""
+    if paths.EDGE_PULL_SECRET.exists():
+        return bytes.fromhex(paths.EDGE_PULL_SECRET.read_text().strip())
+    key = secrets.token_hex(32)
+    write_text_atomic(paths.EDGE_PULL_SECRET, key + "\n", 0o600)
+    return bytes.fromhex(key)
+
+
+def edge_pull_token(loc_id: str) -> str:
+    """Stable per-location token a gateway presents to pull its own nftables ruleset.
+
+    Derived from a server-side secret instead of stored in the model: a location's
+    token never needs its own migration/backfill, and it disappears automatically
+    when the location is deleted.
+    """
+    return hmac.new(_edge_pull_secret(), loc_id.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def all_users(model: dict) -> list[str]:

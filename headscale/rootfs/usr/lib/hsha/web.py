@@ -7,6 +7,7 @@ Supervisor's ingress proxy (172.30.32.2). Home Assistant authenticates the user.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import ipaddress
 import json
 import logging
@@ -17,7 +18,7 @@ import time
 
 from aiohttp import web
 
-from . import __version__, hs, ipp, paths, printers, services, supervisor
+from . import __version__, hs, ipp, paths, policygen, printers, services, supervisor
 from .manager import Manager
 from .options import load
 from .store import read_json
@@ -690,9 +691,23 @@ class App:
         self.manager.poke()
         return web.json_response(result)
 
+    def _edge_pull_url(self, loc_id: str) -> str | None:
+        """http://<HA-host-tailnet-ip>:EDGE_PULL_PORT/... for the gateway's own curl|nft one-liner."""
+        from . import tenancy
+
+        ips = [ip for ip in (self.manager.router.get("ips") or []) if ":" not in ip]
+        if not ips:
+            return None
+        token = tenancy.edge_pull_token(loc_id)
+        return f"http://{ips[0]}:{policygen.EDGE_PULL_PORT}/hsha-edge/{loc_id}/nftables?token={token}"
+
     async def tenancy_edge_key(self, request: web.Request) -> web.Response:
         mt = self._mt()
-        return web.json_response(await mt.edge_key(request.match_info["id"], self._actor(request)))
+        result = await mt.edge_key(request.match_info["id"], self._actor(request))
+        url = self._edge_pull_url(request.match_info["id"])
+        if url:
+            result["pull_command"] = f"curl -fsS '{url}' | nft -f -"
+        return web.json_response(result)
 
     async def tenancy_edge_nft(self, request: web.Request) -> web.Response:
         text = await self._mt().edge_nftables(request.match_info["id"])
@@ -702,6 +717,23 @@ class App:
             content_type="text/plain",
             headers={"Content-Disposition": f'inline; filename="{name}"'},
         )
+
+    async def edge_pull(self, request: web.Request) -> web.Response:
+        """Non-ingress endpoint (EDGE_PULL_PORT): a gateway fetches its own nftables
+        ruleset directly over the tailnet, authenticated by its per-location token
+        instead of an HA ingress session. See tenancy.edge_pull_token."""
+        from . import tenancy
+
+        if self.manager.mt is None:
+            raise web.HTTPNotFound()
+        loc_id = request.match_info["id"]
+        loc = tenancy.location(self.manager.mt.model, loc_id)
+        if loc is None:
+            raise web.HTTPNotFound()
+        if not hmac.compare_digest(request.query.get("token", ""), tenancy.edge_pull_token(loc_id)):
+            raise web.HTTPForbidden(text="Invalid or missing token")
+        text = await self.manager.mt.edge_nftables(loc_id)
+        return web.Response(text=text, content_type="text/plain")
 
     async def tenancy_audit(self, _request: web.Request) -> web.Response:
         from . import audit
@@ -790,6 +822,33 @@ class App:
                 log.warning("Background check failed: %s", exc)
             await asyncio.sleep(MONITOR_INTERVAL)
 
+    def build_edge_pull(self) -> web.Application:
+        """Separate listener bound to EDGE_PULL_PORT on all interfaces (host_network),
+        so it is reachable directly over the tailnet. No ingress_only middleware: this
+        endpoint authenticates with its own per-location token (see edge_pull)."""
+        app = web.Application()
+        app.router.add_get("/hsha-edge/{id}/nftables", self.edge_pull)
+        return app
+
+
+async def _serve(app: App) -> None:
+    ingress_runner = web.AppRunner(app.build(), access_log=None)
+    await ingress_runner.setup()
+    ingress_port = supervisor.ingress_port()
+    await web.TCPSite(ingress_runner, host=os.environ.get("HSHA_BIND", "0.0.0.0"), port=ingress_port).start()
+    log.info("Ingress UI listening on port %s", ingress_port)
+
+    pull_runner = web.AppRunner(app.build_edge_pull(), access_log=None)
+    await pull_runner.setup()
+    await web.TCPSite(pull_runner, host="0.0.0.0", port=policygen.EDGE_PULL_PORT).start()
+    log.info("Edge pull endpoint listening on port %s", policygen.EDGE_PULL_PORT)
+
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await pull_runner.cleanup()
+        await ingress_runner.cleanup()
+
 
 def main() -> int:
     logging.basicConfig(
@@ -797,10 +856,7 @@ def main() -> int:
         format="[hsha] %(levelname)s %(message)s",
     )
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    port = supervisor.ingress_port()
-    app = App().build()
-    log.info("Ingress UI listening on port %s", port)
-    web.run_app(app, host=os.environ.get("HSHA_BIND", "0.0.0.0"), port=port, print=None, access_log=None)
+    asyncio.run(_serve(App()))
     return 0
 
 

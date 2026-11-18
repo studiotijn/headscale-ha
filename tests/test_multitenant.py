@@ -162,10 +162,15 @@ def test_policy_is_deterministic_and_closed():
     a, b = pg.generate(m, ctx()), pg.generate(m, ctx())
     assert a["sha256"] == b["sha256"] and a["text"] == b["text"]
     pol = a["policy"]
-    srcs = {s for g in pol["grants"] for s in g["src"]}
-    # Nothing at a site (gateway, site subnet, device behind it) is ever a source.
+    edge_pull = next(g for g in pol["grants"] if g["#name"] == "Edge pull: own nftables ruleset")
+    other_grants = [g for g in pol["grants"] if g is not edge_pull]
+    srcs = {s for g in other_grants for s in g["src"]}
+    # Nothing at a site (gateway, site subnet, device behind it) is ever a source, except the
+    # one narrow, fixed-port exception that lets a gateway pull its own nftables ruleset
+    # (policygen.generate); that grant is itself checked below to stay scoped to exactly that.
     assert not any(s.endswith("-edge") or s.startswith(("loc-", "dev-")) for s in srcs)
     assert "node-6" not in srcs and "node-7" not in srcs
+    assert edge_pull["dst"] == ["tag:homerouter"] and edge_pull["ip"] == [f"tcp:{pg.EDGE_PULL_PORT}"]
     # No wildcard rules.
     assert all("*" not in g["src"] and "*" not in g["dst"] for g in pol["grants"])
     assert pol["autoApprovers"]["routes"]["10.81.1.0/24"] == ["tag:project-loc01-edge"]
