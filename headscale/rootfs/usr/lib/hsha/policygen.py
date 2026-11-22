@@ -493,10 +493,14 @@ def edge_nftables(model: dict, loc_id: str, ctx: Context, sha: str | None = None
         f'    iifname "tailscale0" ip daddr {vpn} dnat ip prefix to ip daddr map {{ {vpn} : {local} }}',
         "  }",
         "  chain forward {",
-        "    type filter hook forward priority filter + 10; policy drop;",
+        # policy accept + a final drop for tailnet traffic only: a base chain with policy drop
+        # would also drop forwarding the gateway does for itself (Docker bridges, other routes).
+        "    type filter hook forward priority filter + 10; policy accept;",
         "    ct state established,related accept",
-        "    ct state invalid drop",
+        '    iifname "tailscale0" ct state invalid drop',
         *(rules or ["    # no connections to this location: nothing is forwarded"]),
+        '    iifname "tailscale0" drop',
+        '    oifname "tailscale0" drop  # the site never starts connections into the tailnet',
         "  }",
         "  chain postrouting {",
         "    type nat hook postrouting priority srcnat; policy accept;",
@@ -506,6 +510,43 @@ def edge_nftables(model: dict, loc_id: str, ctx: Context, sha: str | None = None
         "",
     ]
     return "\n".join(head)
+
+
+ROLLBACK_S = 300
+
+
+def edge_safe_commands(loc: dict, pull_url: str | None) -> dict:
+    """Commands for a gateway that is ALREADY in the tailnet (bound with bind_edge): no new sign-in,
+    so the connection you run them over stays up.
+
+    apply:   advertise the VPN subnet (``tailscale set`` does not reconnect), IP forwarding on, fetch and
+             check the firewall, arm an automatic rollback (table removed after ROLLBACK_S seconds) and
+             load it. Not persistent yet: a reboot also undoes it.
+    confirm: cancel the rollback and load the firewall at boot (systemd unit).
+    """
+    vpn = ipaddress.ip_network(loc["vpn_subnet"])
+    src = f'curl -fsS "{pull_url}" -o /etc/hsha-edge.nft.new' if pull_url else "cp ./hsha-edge.nft /etc/hsha-edge.nft.new"
+    apply = (
+        "sudo sh -c 'set -e; "
+        "systemctl stop hsha-edge-rollback.timer 2>/dev/null || true; "
+        f"tailscale set --advertise-routes={vpn}; "
+        "echo net.ipv4.ip_forward=1 > /etc/sysctl.d/99-hsha-edge.conf; sysctl -q -w net.ipv4.ip_forward=1; "
+        f"{src}; nft -c -f /etc/hsha-edge.nft.new; "
+        f"systemd-run --quiet --unit=hsha-edge-rollback --on-active={ROLLBACK_S} nft delete table inet hsha_edge; "
+        "mv /etc/hsha-edge.nft.new /etc/hsha-edge.nft; nft -f /etc/hsha-edge.nft; "
+        f"echo; echo \"Firewall actief. Zonder bevestiging binnen {ROLLBACK_S // 60} min wordt hij automatisch weer verwijderd.\"'"
+    )
+    unit = (
+        r"[Unit]\nDescription=Headscale-HA gateway firewall\nAfter=network-pre.target\n"
+        r"[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/sbin/nft -f /etc/hsha-edge.nft\n"
+        r"ExecStop=/usr/sbin/nft delete table inet hsha_edge\n[Install]\nWantedBy=multi-user.target\n"
+    )
+    confirm = (
+        "sudo sh -c 'systemctl stop hsha-edge-rollback.timer; "
+        f"printf \"{unit}\" > /etc/systemd/system/hsha-edge.service; "
+        "systemctl daemon-reload; systemctl enable hsha-edge.service; echo \"Bevestigd: firewall blijft, ook na herstart.\"'"
+    )
+    return {"apply": apply, "confirm": confirm, "rollback_s": ROLLBACK_S}
 
 
 def edge_up_command(loc: dict, login_server: str, authkey: str = "<KEY>") -> str:

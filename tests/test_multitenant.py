@@ -207,7 +207,8 @@ def test_edge_nftables():
     m = build()
     text = pg.edge_nftables(m, "loc01", ctx())
     assert "dnat ip prefix to ip daddr map { 10.81.1.0/24 : 192.168.1.0/24 }" in text
-    assert "policy drop;" in text
+    assert "policy accept;" in text and "policy drop;" not in text   # Docker on the gateway keeps forwarding
+    assert 'iifname "tailscale0" drop' in text and 'oifname "tailscale0" drop' in text
     assert "ip saddr 100.64.0.1 ip daddr 192.168.1.10 tcp dport { 80, 8010 } accept" in text
     assert "ip saddr 100.64.0.4 ip daddr 192.168.1.0/24 tcp dport 80 accept" in text
     assert "cam2" not in text and "10.81.2" not in text
@@ -570,3 +571,58 @@ def test_network_as_source_is_not_tested_from_the_home_router():
     assert ("node-1", "dev-dmx:6454") not in accepts
     grant = next(g for g in r["policy"]["grants"] if g["#name"] == "artnet")
     assert grant["src"] == ["group:dom-private", "tag:private-server"] and grant["ip"] == ["6454"]
+
+
+def test_edge_safe_commands():
+    m = build()
+    loc = tn.location(m, "loc01")
+    c = pg.edge_safe_commands(loc, "http://100.64.0.3:8099/hsha-edge/loc01/nftables?token=x")
+    assert "tailscale set --advertise-routes=10.81.1.0/24" in c["apply"]
+    assert "tailscale up" not in c["apply"]                                   # never a new sign-in
+    assert c["apply"].index("nft -c -f") < c["apply"].index("systemd-run")    # checked before armed
+    assert c["apply"].index("systemd-run") < c["apply"].index("nft -f /etc/hsha-edge.nft;")  # armed before loaded
+    assert "nft delete table inet hsha_edge" in c["apply"]
+    assert "systemctl stop hsha-edge-rollback.timer" in c["confirm"] and "enable hsha-edge.service" in c["confirm"]
+    for cmd in (c["apply"], c["confirm"]):
+        inner = cmd.split("sudo sh -c '", 1)[1].rsplit("'", 1)[0]
+        assert "'" not in inner
+        assert subprocess.run(["sh", "-n", "-c", inner]).returncode == 0
+
+
+def test_bind_edge(tmp_path, monkeypatch):
+    import asyncio
+    import types
+
+    from hsha import audit, hs, multitenant, paths
+
+    monkeypatch.setattr(paths, "AUDIT", tmp_path / "audit.jsonl")
+    monkeypatch.setattr(paths, "TENANCY", tmp_path / "t.json")
+    nodes = [dict(n) for n in NODES] + [node(8, "edge-zp-002", tags=["tag:project-server"])]
+    tags = {}
+
+    async def fake_nodes():
+        return nodes
+
+    async def fake_policy():
+        return '"tag:project-loc01-edge" "tag:project-loc02-edge"'
+
+    async def fake_set_tags(nid, t):
+        tags[nid] = t
+
+    monkeypatch.setattr(hs, "nodes", fake_nodes)
+    monkeypatch.setattr(hs, "get_policy", fake_policy)
+    monkeypatch.setattr(hs, "set_tags", fake_set_tags)
+    opts = types.SimpleNamespace(admin_user="admin", subnet_router=False, exit_node=False)
+    mt = multitenant.MultiTenant(types.SimpleNamespace(opts=opts, state={}, desired_routes=lambda: []))
+    m = build()
+    m["activated"] = True
+    mt.model = m
+    with pytest.raises(tn.ModelError, match="already has a gateway"):      # loc01 has edge-loc01 (node 6)
+        asyncio.run(mt.bind_edge("loc01", 8, "t"))
+    with pytest.raises(tn.ModelError, match="already the gateway"):        # node 6 belongs to loc01
+        asyncio.run(mt.bind_edge("loc02", 6, "t"))
+    with pytest.raises(tn.ModelError, match="router"):
+        asyncio.run(mt.bind_edge("loc02", 3, "t"))
+    nodes.pop(6)                                                            # loc02 has no gateway yet
+    r = asyncio.run(mt.bind_edge("loc02", 8, "t"))
+    assert tags == {8: ["tag:project-loc02-edge"]} and r["previous_tags"] == ["tag:project-server"]

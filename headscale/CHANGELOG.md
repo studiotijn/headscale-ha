@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.18.0
+
+- **Bind a gateway that is already in the tailnet.** *Locations → Bind existing device* turns a
+  device that is already signed in into the location's gateway by changing its tag on the server.
+  It keeps its key, address and connection: nothing to sign in again on site.
+- **Safe commands for the gateway.** After binding (or via *Safe commands*) the app shows two
+  commands. The first turns on the route with `tailscale set` (no reconnect), checks and loads the
+  firewall and arms an automatic rollback after 5 minutes. The second confirms it and loads it at boot.
+- **Gateway firewall leaves other forwarding alone.** The forward chain now only drops tailnet
+  traffic (`iifname/oifname tailscale0`) instead of everything (`policy drop`), so Docker and other
+  routing on the gateway keep working.
+
 ## 0.17.0
 
 - **Gateway firewall: one-liner pull instead of copy/paste.** *Locations → Gateway key* now also

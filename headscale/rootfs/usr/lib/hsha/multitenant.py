@@ -333,6 +333,36 @@ class MultiTenant:
         audit.record("edge-key", actor, f"one-time key for {loc['name']} ({tag})")
         return {"tag": tag, "command": policygen.edge_up_command(loc, self.opts.server_url_clean, key)}
 
+    async def bind_edge(self, loc_id: str, node_id: int, actor: str | None) -> dict:
+        """Make a device that is already in the tailnet the gateway of a location by changing its tag
+        on the server. The device keeps its key, IP and connection: nothing to sign in again on site."""
+        loc = tenancy.location(self.model, loc_id)
+        if loc is None:
+            raise ModelError("Unknown location")
+        tag = tenancy.edge_tag(loc)
+        if not self.model.get("activated") or f'"{tag}"' not in (await hs.get_policy() or ""):
+            raise ModelError("Apply the policy first, so the gateway tag exists")
+        nodes = await hs.nodes()
+        node = next((n for n in nodes if int(n["id"]) == int(node_id)), None)
+        if node is None:
+            raise ModelError("Unknown device")
+        tags = tenancy.node_tags(node)
+        if "tag:homerouter" in tags:
+            raise ModelError("Home Assistant's own router cannot be a gateway")
+        other = tenancy.node_location(self.model, node)
+        if other and other != loc_id:
+            raise ModelError(f"This device is already the gateway of {tenancy.location(self.model, other)['name']}")
+        current = tenancy.edge_node(self.model, loc, nodes)
+        if current is not None and int(current["id"]) != int(node_id):
+            raise ModelError(f"{loc['name']} already has a gateway ({current.get('given_name') or current.get('name')})")
+        if tags and not all(t.endswith("-server") or t.endswith("-edge") for t in tags):
+            raise ModelError("This device has a tag of its own; change it in Headplane")
+        name = node.get("given_name") or node.get("name")
+        if tags != [tag]:
+            await hs.set_tags(int(node_id), [tag])
+            audit.record("edge-bind", actor, f"{name} is now the gateway of {loc['name']} ({tag}, was {', '.join(tags) or 'untagged'})")
+        return {"node": name, "tag": tag, "previous_tags": tags}
+
     async def tag_server(self, node_id: int, actor: str | None) -> dict:
         """Turn a device into a server of its network: tagged, no longer tied to a person, no expiry."""
         nodes = {int(n["id"]): n for n in await hs.nodes()}

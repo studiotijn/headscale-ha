@@ -36,6 +36,11 @@ Object.assign(STRINGS.nl, {
   mt_locations: "Locaties (gateways)", mt_loc_intro: "Alle locaties mogen hetzelfde lokale subnet gebruiken (bv. 192.168.1.0/24). De gateway vertaalt 1-op-1: lokaal 192.168.1.y is via het VPN 10.81.<nummer>.y.",
   mt_number: "Nummer", mt_domain: "Netwerk", mt_local: "Lokaal subnet", mt_vpn: "VPN-subnet", mt_vpn_auto: "automatisch 10.81.<nr>.0/24",
   mt_iface: "LAN-interface van de gateway", mt_edge: "Gateway", mt_edge_none: "nog niet aangemeld", mt_route_ok: "route actief", mt_route_wait: "route niet goedgekeurd",
+  mt_edge_bind: "Bestaand apparaat koppelen", mt_edge_bind_pick: "Apparaat dat al in het tailnet zit (blijft verbonden, geen nieuwe login):",
+  mt_edge_bind_none: "Geen geschikt apparaat online of bekend.", mt_edge_safe: "Veilige commando's",
+  mt_edge_safe_apply: "1. Voer uit op de gateway. Zet de route aan en laadt de firewall, met automatisch terugdraaien na {m} min:",
+  mt_edge_safe_confirm: "2. Werkt alles nog (SSH en de apparaten via 10.81.x)? Bevestig dan binnen {m} min:",
+  mt_edge_safe_note: "Niet bevestigd, of de verbinding valt weg? Dan haalt de gateway de firewall zelf weer weg. De route en het tailnet-adres blijven ongewijzigd.",
   mt_edge_key: "Sleutel voor gateway", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Voer uit op de gateway (sleutel 1 uur geldig, eenmalig):",
   mt_edge_pull: "Daarna: voer dit uit op de gateway om de firewall direct op te halen (geen kopiëren/plakken nodig):",
   mt_edge_steps: "Daarna: zet IP-forwarding aan (sysctl net.ipv4.ip_forward=1) en zet de gateway op de router van de locatie in een eigen firewallzone. Herhaal de opdracht hierboven na het wijzigen van verbindingen.",
@@ -126,6 +131,11 @@ Object.assign(STRINGS.en, {
   mt_locations: "Locations (gateways)", mt_loc_intro: "All locations may use the same local subnet (e.g. 192.168.1.0/24). The gateway maps it 1:1: local 192.168.1.y is 10.81.<number>.y over the VPN.",
   mt_number: "Number", mt_domain: "Network", mt_local: "Local subnet", mt_vpn: "VPN subnet", mt_vpn_auto: "automatic 10.81.<no>.0/24",
   mt_iface: "Gateway LAN interface", mt_edge: "Gateway", mt_edge_none: "not signed in yet", mt_route_ok: "route active", mt_route_wait: "route not approved",
+  mt_edge_bind: "Bind existing device", mt_edge_bind_pick: "Device already in the tailnet (stays connected, no new sign-in):",
+  mt_edge_bind_none: "No suitable device known.", mt_edge_safe: "Safe commands",
+  mt_edge_safe_apply: "1. Run on the gateway. Turns on the route and loads the firewall, rolled back automatically after {m} min:",
+  mt_edge_safe_confirm: "2. Everything still works (SSH and the devices via 10.81.x)? Then confirm within {m} min:",
+  mt_edge_safe_note: "Not confirmed, or the connection drops? The gateway removes the firewall by itself. The route and the tailnet address stay as they are.",
   mt_edge_key: "Gateway key", mt_nft: "Firewall (nftables)", mt_edge_cmd: "Run on the gateway (key valid for 1 hour, single use):",
   mt_edge_pull: "Then: run this on the gateway to fetch the firewall directly (no copy/paste needed):",
   mt_edge_steps: "Then: enable IP forwarding (sysctl net.ipv4.ip_forward=1) and put the gateway in its own firewall zone on the location's router. Re-run the command above after changing connections.",
@@ -833,6 +843,36 @@ function mtSitesView() {
             el("p", { class: "small" }, t("mt_edge_steps"))));
         } catch (err) { banner(err.message); } finally { busy(keyBtn, false); }
       });
+      // in a dialog: binding re-renders this view, which would drop an inline note
+      const showSafe = (c) => openDialog(`${l.name}: ${t("mt_edge_safe")}`, el("div", {},
+        el("p", {}, fmt("mt_edge_safe_apply", { m: c.rollback_s / 60 })), copyable(c.apply),
+        el("p", {}, fmt("mt_edge_safe_confirm", { m: c.rollback_s / 60 })), copyable(c.confirm),
+        el("p", { class: "small muted" }, t("mt_edge_safe_note"))), { saveLabel: "OK" });
+      const safeBtn = el("button", { class: "btn secondary small", type: "button" }, t("mt_edge_safe"));
+      safeBtn.addEventListener("click", async () => {
+        busy(safeBtn, true);
+        try { showSafe(await api(`tenancy/locations/${l.id}/commands`)); }
+        catch (err) { banner(err.message); } finally { busy(safeBtn, false); }
+      });
+      const bindBtn = el("button", { class: "btn small", type: "button" }, t("mt_edge_bind"));
+      bindBtn.addEventListener("click", () => {
+        const cands = mtData.nodes.filter((n) => !n.location && n.role !== "router" && n.ipv4
+          && (!n.tags || !n.tags.length || n.tags.every((x) => x.endsWith("-server"))));
+        if (!cands.length) { banner(t("mt_edge_bind_none")); return; }
+        const guess = cands.find((n) => n.name.toLowerCase().includes(l.name.toLowerCase()));
+        const pick = selectEl(cands.map((n) => ({ value: String(n.id),
+          label: `${n.name} · ${n.ipv4}${n.online ? "" : ` (${t("offline")})`}` })), guess ? String(guess.id) : undefined);
+        openDialog(`${l.name}: ${t("mt_edge_bind")}`, el("div", { class: "form-grid" }, mtField(t("mt_edge_bind_pick"), pick)), {
+          saveLabel: t("mt_edge_bind"),
+          onSave: async () => {
+            const r = await api(`tenancy/locations/${l.id}/bind`, { method: "POST", body: { node_id: Number(pick.value) } });
+            if (current === "networks") await loadNetworks(); else mtData = await api("tenancy");
+            renderApplyBar();
+            mtRefreshers.forEach((fn) => fn());
+            setTimeout(() => showSafe(r.commands), 0);
+          },
+        });
+      });
       const edge = l.edge
         ? el("div", {}, el("span", { class: `pill ${l.edge.online ? "ok" : ""}` }, `${l.edge.name} · ${l.edge.online ? t("online") : t("offline")}`),
           el("div", { class: `small ${l.route_approved ? "ok-text" : "warn-text"}` }, t(l.route_approved ? "mt_route_ok" : "mt_route_wait")))
@@ -841,7 +881,7 @@ function mtSitesView() {
         el("td", {}, el("strong", {}, l.name), el("div", { class: "muted small mono" }, `${(mtDomain(l.domain) || {}).name} · ${l.tag}`)),
         el("td", { class: "mono" }, `${l.local_subnet} → ${l.vpn_subnet}\n${l.lan_iface}`),
         el("td", {}, edge),
-        el("td", { class: "actions" }, editBtn(() => editLocation(l)), keyBtn,
+        el("td", { class: "actions" }, editBtn(() => editLocation(l)), l.edge ? safeBtn : bindBtn, keyBtn,
           el("a", { class: "btn secondary small", href: `api/tenancy/locations/${l.id}/nftables`, target: "_blank", rel: "noopener" }, t("mt_nft"))));
     })), out);
   const devCard = el("article", { class: "card" },

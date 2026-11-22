@@ -709,6 +709,25 @@ class App:
             result["pull_command"] = f"curl -fsS '{url}' | nft -f -"
         return web.json_response(result)
 
+    def _edge_safe(self, loc_id: str) -> dict:
+        from . import tenancy
+
+        loc = tenancy.location(self._mt().model, loc_id)
+        if loc is None:
+            raise web.HTTPNotFound()
+        return policygen.edge_safe_commands(loc, self._edge_pull_url(loc_id))
+
+    async def tenancy_edge_bind(self, request: web.Request) -> web.Response:
+        mt = self._mt()
+        body = await request.json()
+        loc_id = request.match_info["id"]
+        result = await mt.bind_edge(loc_id, int(body.get("node_id") or 0), self._actor(request))
+        self.manager.poke()
+        return web.json_response({**result, "commands": self._edge_safe(loc_id)})
+
+    async def tenancy_edge_commands(self, request: web.Request) -> web.Response:
+        return web.json_response(self._edge_safe(request.match_info["id"]))
+
     async def tenancy_edge_nft(self, request: web.Request) -> web.Response:
         text = await self._mt().edge_nftables(request.match_info["id"])
         name = f"hsha-edge-{request.match_info['id']}.nft"
@@ -789,6 +808,8 @@ class App:
         app.router.add_get("/api/tenancy/audit", self.tenancy_audit)
         app.router.add_post("/api/tenancy/locations/{id}/key", self.tenancy_edge_key)
         app.router.add_get("/api/tenancy/locations/{id}/nftables", self.tenancy_edge_nft)
+        app.router.add_post("/api/tenancy/locations/{id}/bind", self.tenancy_edge_bind)
+        app.router.add_get("/api/tenancy/locations/{id}/commands", self.tenancy_edge_commands)
         app.router.add_post(
             "/api/tenancy/{kind:domain|location|device|connection|group|profile|noderole}/{action:create|update|delete}",
             self.tenancy_change,
